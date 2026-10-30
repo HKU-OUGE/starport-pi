@@ -8,12 +8,12 @@ if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
     if ($LASTEXITCODE -ne 0) { throw 'Node.js installation failed.' }
     Update-InstallPath
 }
-$NodePath = (Get-Command node -CommandType Application -ErrorAction Stop).Source
-$NpmPath = (Get-Command npm.cmd -CommandType Application -ErrorAction Stop).Source
+$NodePath = (Get-Command node -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
+$NpmPath = (Get-Command npm.cmd -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source
 & $NodePath -e "const [a,b]=process.versions.node.split('.').map(Number);process.exit(a>22||a===22&&b>=19?0:1)"
 if ($LASTEXITCODE -ne 0) { throw 'Node.js 22.19 or later is required.' }
 function Find-WorkingPython {
-    $Candidates = @((Get-Command python -ErrorAction SilentlyContinue).Source, (Join-Path $env:LOCALAPPDATA 'Programs\Python\Python312\python.exe'))
+    $Candidates = @((Get-Command python -CommandType Application -ErrorAction SilentlyContinue | ForEach-Object { $_.Source })) + @((Join-Path $env:LOCALAPPDATA 'Programs\Python\Python312\python.exe'))
     foreach ($Candidate in $Candidates) {
         if (-not $Candidate -or -not (Test-Path $Candidate)) { continue }
         try {
