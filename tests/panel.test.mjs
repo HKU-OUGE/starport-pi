@@ -11,7 +11,7 @@ import { load, save } from "../src/config.mjs";
 import { PanelStore } from "../src/panel-store.mjs";
 import { parseSshCommand, verifyWorker } from "../src/setup.mjs";
 import { findKeys, fingerprint } from "../src/keys.mjs";
-import { processCall } from "../src/transport.mjs";
+import { processCall, sshArgs } from "../src/transport.mjs";
 
 test("Access JWT verifies signature, audience, issuer, expiry and exact email", async () => {
   const { publicKey, privateKey } = await generateKeyPair("RS256"),
@@ -260,6 +260,13 @@ test("SSH command input cannot execute local commands or proxy options", () => {
     "ssh -p 0 a",
   ])
     assert.throws(() => parseSshCommand(s));
+});
+test('private known-host paths survive native OpenSSH parsing with spaces',async()=>{
+  const file=path.join(os.tmpdir(),'starport profile','known_hosts');
+  const args=sshArgs('alpha',{mode:'ssh',host:'worker.example.invalid',knownHostsFile:file},os.tmpdir());
+  const output=(await processCall('ssh',['-G',...args],'')).toString();
+  const line=output.split('\n').find(x=>x.startsWith('userknownhostsfile '));
+  assert.ok(line.includes(file.replaceAll('\\','/')),line);
 });
 test("server activation requires a successful isolation probe and confirmed resource release", async () => {
   let status = { status: "completed", exit_code: 0, released: true };

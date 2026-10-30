@@ -1,0 +1,29 @@
+{
+  "format": 1,
+  "client_ci": {
+    "source_commit": "b8a8c7bbfdd5ae535bb69c5df24254966549bfea",
+    "url": "https://github.com/HKU-OUGE/starport-pi/actions/runs/41048788371",
+    "windows": "passed",
+    "linux": "passed",
+    "macos": "passed",
+    "windows_checks": ["native PowerShell installer", "web build", "Node tests", "launcher", "PowerShell syntax", "source privacy audit"]
+  },
+  "browser": {
+    "backend": "test adapter with real Pi SDK and a deterministic stream",
+    "desktop": "passed",
+    "mobile": "passed",
+    "subscription_import": "passed",
+    "session_message": "passed",
+    "job_logs_and_artifacts": "passed",
+    "upload_download": {
+      "bytes": 1520000,
+      "sha256": "6db2ff1bed8aa1752f8984804cd1f4a15170af56f2ec0bfa8883a129cc4f33f9",
+      "matches": true
+    }
+  },
+  "cloudflare_provisioning": "mock API; ordering, JWT boundary, resume and rollback tested",
+  "live_cloudflare_login": "requires deployment credentials and real allowed-user login",
+  "new_server_installation": "requires deployment connection; activation gated by a real isolation probe",
+  "native_elevation_dialogs": "not interactively accepted in CI",
+  "existing_services_changed": false
+}

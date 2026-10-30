@@ -11,7 +11,10 @@ export function sshArgs(name,server,root,{forward=false}={}) {
   const args=['-T','-o','BatchMode=yes','-o','StrictHostKeyChecking=yes','-o','ForwardAgent=no',
     '-o','ServerAliveInterval=20','-o','ServerAliveCountMax=3','-o','ConnectTimeout=12'];
   if (!forward) args.push('-o','ClearAllForwardings=yes');
-  if(server.knownHostsFile)args.push('-o','UserKnownHostsFile='+server.knownHostsFile,'-o','GlobalKnownHostsFile=none');
+  if(server.knownHostsFile){
+    const file=server.knownHostsFile.replaceAll('\\','/').replaceAll('"','\\"').replaceAll('%','%%');
+    args.push('-o',`UserKnownHostsFile="${file}"`,'-o','GlobalKnownHostsFile=none');
+  }
   if (server.mode==='ssh') {
     if(server.port)args.push('-p',String(server.port));
     if(server.identityFile)args.push('-i',server.identityFile,'-o','IdentitiesOnly=yes');
