@@ -8,6 +8,7 @@ export default function AttachmentCard({
   name = "附件",
   cloud = false,
   href,
+  showName = true,
 }) {
   const [open, O] = useState(false);
   const [metadata, S] = useState(null),
@@ -35,7 +36,7 @@ export default function AttachmentCard({
   return (
     <div className="attachment-card">
       <div>
-        <b>{name}</b>
+        {showName && <b>{name}</b>}
         <a href={url} download>
           下载
         </a>

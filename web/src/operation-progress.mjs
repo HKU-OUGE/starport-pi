@@ -1,4 +1,5 @@
 const stages = {
+  updating_worker: "更新执行器接口",
   downloading_rootfs: "下载系统镜像",
   downloading_runtime: "下载隔离运行时",
 };
@@ -31,20 +32,31 @@ const errors = {
   download_partial_restarting: "原缓存无法接续，重新下载",
 };
 export function downloadErrorLabel(code) {
-  return errors[code] || (/^download_http_\d{3}$/.test(code || "")
-    ? `下载站返回 HTTP ${code.slice(-3)}` : code);
+  return (
+    errors[code] ||
+    (/^download_http_\d{3}$/.test(code || "")
+      ? `下载站返回 HTTP ${code.slice(-3)}`
+      : code)
+  );
 }
 export function operationProgress(op) {
-  const d = op.detail || {}, pieces = [stages[op.stage] || op.stage];
+  const d = op.detail || {},
+    pieces = [stages[op.stage] || op.stage];
   if (d.phase === "retrying")
-    pieces.push(`等待重试 ${d.attempt + 1}/${d.maxAttempts}（${Math.ceil(d.retryInMs / 1000)} 秒）`);
+    pieces.push(
+      `等待重试 ${d.attempt + 1}/${d.maxAttempts}（${Math.ceil(d.retryInMs / 1000)} 秒）`,
+    );
   else if (phases[d.phase]) pieces.push(phases[d.phase]);
   if (d.phase === "downloading" && d.resumed) pieces.push("断点续传");
-  if (d.phase !== "retrying" && d.attempt > 1) pieces.push(`第 ${d.attempt}/${d.maxAttempts} 次连接`);
+  if (d.phase !== "retrying" && d.attempt > 1)
+    pieces.push(`第 ${d.attempt}/${d.maxAttempts} 次连接`);
   if (Number.isFinite(d.bytes))
-    pieces.push(`${(d.bytes / 1048576).toFixed(1)} MiB${d.total ? " / " + (d.total / 1048576).toFixed(1) + " MiB" : ""}`);
+    pieces.push(
+      `${(d.bytes / 1048576).toFixed(1)} MiB${d.total ? " / " + (d.total / 1048576).toFixed(1) + " MiB" : ""}`,
+    );
   const error = op.error || (d.phase === "retrying" ? d.error : null);
   if (error) pieces.push(downloadErrorLabel(error));
-  if (op.result?.updated?.length) pieces.push("已更新：" + op.result.updated.join("、"));
+  if (op.result?.updated?.length)
+    pieces.push("已更新：" + op.result.updated.join("、"));
   return pieces.filter(Boolean).join(" · ");
 }

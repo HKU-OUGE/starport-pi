@@ -70,6 +70,7 @@ function fakeRemote() {
         return { id: String(++seq).padStart(32, "0") };
       if (op === "file.list")
         return {
+          capabilities: { fileManagement: 1 },
           entries: [...files].map(([name, b]) => ({
             name,
             kind: "file",
@@ -81,6 +82,8 @@ function fakeRemote() {
         uploads.set(id, { ...p, data: Buffer.alloc(0) });
         return { id, offset: 0 };
       }
+      if (op === "file.manage")
+        return { changed: true, path: p.destination || p.path };
       if (op === "upload.chunk") {
         const u = uploads.get(p.upload),
           b = Buffer.from(p.data, "base64");
@@ -230,10 +233,52 @@ test("HTTP panel rejects unauthenticated and cross-origin writes; streams verifi
     const grant = await (
       await post("sessions/" + id + "/upload-begin", {
         name: "sample.bin",
+        directory: "assets",
         bytes: data.length,
         sha256,
       })
     ).json();
+    assert.equal(grant.path, "assets/sample.bin");
+    assert.equal(
+      (
+        await post("sessions/" + id + "/upload-begin", {
+          name: "escape.txt",
+          directory: "../outside",
+          bytes: 1,
+          sha256: "a".repeat(64),
+        })
+      ).status,
+      400,
+    );
+    assert.equal(
+      (
+        await post("sessions/" + id + "/file-manage", {
+          action: "mkdir",
+          path: "../outside",
+        })
+      ).status,
+      400,
+    );
+    assert.equal(
+      (
+        await post("sessions/" + id + "/file-manage", {
+          action: "mkdir",
+          path: "data",
+        })
+      ).status,
+      200,
+    );
+    assert.equal(
+      (
+        await post("sessions/" + id + "/file-manage", {
+          action: "rename",
+          path: "data",
+          destination: "/etc",
+          version: "fixed",
+        })
+      ).status,
+      400,
+    );
     for (let offset = 0; offset < data.length; offset += 1000000) {
       const b = data.subarray(offset, offset + 1000000);
       const r = await post("sessions/" + id + "/upload-chunk", {
@@ -270,6 +315,14 @@ test("HTTP panel rejects unauthenticated and cross-origin writes; streams verifi
     );
     assert.equal(download.status, 200);
     assert.deepEqual(Buffer.from(await download.arrayBuffer()), data);
+    const textView = await fetch(
+      base + "/api/sessions/" + id + "/file-text?path=assets/sample.bin",
+      { headers: head },
+    );
+    assert.equal(
+      (await textView.json()).error,
+      "text_file_too_large_or_binary",
+    );
     const part = await fetch(
       base +
         "/api/sessions/" +

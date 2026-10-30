@@ -8,7 +8,8 @@ import AttachmentCard from "./AttachmentCard";
 import PreviewBoundary from "./PreviewBoundary";
 const RichMarkdown = lazy(() => import("./RichMarkdown"));
 const Usage = lazy(() => import("./Usage"));
-import { createSHA256 } from "hash-wasm";
+import { uploadFile } from "./uploads";
+const WorkspaceFiles = lazy(() => import("./WorkspaceFiles"));
 import { api, setCsrf, fileUrl } from "./api";
 import "./style.css";
 const Setup = lazy(() => import("./Setup"));
@@ -28,12 +29,6 @@ class SetupBoundary extends React.Component {
     );
   }
 }
-const bytes = (n) =>
-  n < 1024
-    ? n + " B"
-    : n < 1048576
-      ? (n / 1024).toFixed(1) + " KiB"
-      : (n / 1048576).toFixed(1) + " MiB";
 const label = (s) =>
   ({
     idle: "已就绪",
@@ -257,8 +252,6 @@ function App() {
     [message, M] = useState(""),
     [sending, Send] = useState(false),
     [uploading, U] = useState(""),
-    [files, F] = useState([]),
-    [filePath, Path] = useState("."),
     [job, J] = useState(""),
     [logs, Log] = useState(""),
     [artifacts, Art] = useState([]),
@@ -433,26 +426,6 @@ function App() {
     if (tab === "conversation")
       end.current?.scrollIntoView({ block: "nearest" });
   }, [rows.length, active, tab]);
-  async function readFiles() {
-    if (!active) return;
-    try {
-      F(
-        (
-          await api(
-            "sessions/" +
-              active +
-              "/files?" +
-              new URLSearchParams({ path: filePath }),
-          )
-        ).entries,
-      );
-    } catch (e) {
-      E(e.message);
-    }
-  }
-  useEffect(() => {
-    if (tab === "files") readFiles();
-  }, [active, tab, filePath]);
   useEffect(() => {
     if (!active || !job || tab !== "tasks") return;
     let stop = false;
@@ -499,7 +472,6 @@ function App() {
     ToolsOpen(false);
     Menu(false);
     T("conversation");
-    Path(".");
     J("");
     E("");
     M("");
@@ -528,75 +500,22 @@ function App() {
       Send(false);
     }
   }
-  async function upload(file, asAttachment = false) {
+  async function upload(file) {
     if (!file) return;
-    U("计算校验值");
+    const target = active;
     E("");
     try {
-      const hash = await createSHA256();
-      hash.init();
-      for (let offset = 0; offset < file.size; offset += 1048576)
-        hash.update(
-          new Uint8Array(
-            await file.slice(offset, offset + 1048576).arrayBuffer(),
-          ),
-        );
-      const target = active,
-        route = asAttachment ? "attach" : "upload",
-        sha256 = hash.digest("hex"),
-        resumeKey = "starport-" + route + "-" + target + "-" + sha256;
-      // Only an opaque grant and checksum are retained; never credentials or file contents.
-      let grant;
-      try {
-        grant = JSON.parse(sessionStorage.getItem(resumeKey));
-      } catch {}
-      if (!grant) {
-        grant = await api("sessions/" + target + "/" + route + "-begin", {
-          name: file.name,
-          bytes: file.size,
-          sha256,
-        });
-        sessionStorage.setItem(resumeKey, JSON.stringify(grant));
-      }
-      const h = await createSHA256();
-      while (grant.offset < file.size) {
-        const data = new Uint8Array(
-          await file.slice(grant.offset, grant.offset + 1048576).arrayBuffer(),
-        );
-        h.init();
-        h.update(data);
-        let binary = "";
-        for (let i = 0; i < data.length; i += 32768)
-          binary += String.fromCharCode(...data.subarray(i, i + 32768));
-        const r = await api("sessions/" + target + "/" + route + "-chunk", {
-          upload: grant.id,
-          offset: grant.offset,
-          data: btoa(binary),
-          sha256: h.digest("hex"),
-        });
-        grant.offset = r.offset;
-        sessionStorage.setItem(resumeKey, JSON.stringify(grant));
-        U(
-          "上传 " +
-            Math.round((grant.offset / Math.max(file.size, 1)) * 100) +
-            "%",
-        );
-      }
-      const done = await api("sessions/" + target + "/" + route + "-finish", {
-        upload: grant.id,
+      const done = await uploadFile({
+        session: target,
+        file,
+        attachment: true,
+        progress: U,
       });
-      if (done.sha256 !== sha256) throw new Error("upload_checksum");
-      sessionStorage.removeItem(resumeKey);
       if (activeRef.current === target) {
-        if (asAttachment) {
-          Attached((xs) =>
-            xs.some((x) => x.id === done.id) ? xs : [...xs, done],
-          );
-          AttachmentNames((xs) => ({ ...xs, [done.id]: done.name }));
-        } else {
-          M((s) => s + (s ? "\n" : "") + "已附加文件：/workspace/" + done.path);
-          readFiles();
-        }
+        Attached((xs) =>
+          xs.some((x) => x.id === done.id) ? xs : [...xs, done],
+        );
+        AttachmentNames((xs) => ({ ...xs, [done.id]: done.name }));
       }
     } catch (e) {
       E(e.message + " · 重选同一文件可接续");
@@ -1011,7 +930,7 @@ function App() {
                           onChange={async (e) => {
                             const files = [...e.target.files];
                             e.target.value = "";
-                            for (const file of files) await upload(file, true);
+                            for (const file of files) await upload(file);
                           }}
                         />
                         <button
@@ -1160,72 +1079,15 @@ function App() {
                   </section>
                 )}
                 {tab === "files" && (
-                  <section className="files">
-                    <div className="task-toolbar">
-                      <b>/workspace/{filePath === "." ? "" : filePath}</b>
-                      <button
-                        onClick={() => {
-                          Path(".");
-                          readFiles();
-                        }}
-                      >
-                        根目录
-                      </button>
-                      <button
-                        disabled={current.mode === "chat"}
-                        onClick={() => fileInput.current.click()}
-                      >
-                        上传
-                      </button>
-                      <input
-                        type="file"
-                        hidden
-                        ref={fileInput}
-                        onChange={(e) => {
-                          upload(e.target.files[0]);
-                          e.target.value = "";
-                        }}
+                  <PreviewBoundary>
+                    <Suspense fallback={<p>读取工作区…</p>}>
+                      <WorkspaceFiles
+                        key={active}
+                        session={active}
+                        working={working}
                       />
-                    </div>
-                    {uploading && <p role="status">{uploading}</p>}
-                    {files.map((f) => (
-                      <div className="list-row" key={f.name}>
-                        <span>
-                          <Icon
-                            name={f.kind === "directory" ? "folder" : "file"}
-                          />
-                          {f.kind === "directory" ? (
-                            <button
-                              onClick={() =>
-                                Path(
-                                  (filePath === "." ? "" : filePath + "/") +
-                                    f.name,
-                                )
-                              }
-                            >
-                              {f.name}/
-                            </button>
-                          ) : (
-                            f.name
-                          )}
-                        </span>
-                        <span>
-                          {bytes(f.bytes)}{" "}
-                          {f.kind === "file" && (
-                            <AttachmentCard
-                              name={f.name}
-                              href={fileUrl(
-                                active,
-                                (filePath === "." ? "" : filePath + "/") +
-                                  f.name,
-                              )}
-                            />
-                          )}
-                        </span>
-                      </div>
-                    ))}
-                    {!files.length && <p className="muted">工作区尚无文件。</p>}
-                  </section>
+                    </Suspense>
+                  </PreviewBoundary>
                 )}
               </>
             )}

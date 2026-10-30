@@ -116,6 +116,64 @@ def lock(config):
         fcntl.flock(f,fcntl.LOCK_EX);yield
 
 
+@contextlib.contextmanager
+def workspace_change(cfg,wid):
+    with lock(cfg):
+        if any(r['workspace']==wid and not r.get('released') for _,r in records(cfg)):
+            raise ValueError('workspace_busy')
+        yield
+
+
+def file_version(st):
+    return hashlib.sha256(str((st.st_dev,st.st_ino,st.st_mode,st.st_size,st.st_mtime_ns,st.st_ctime_ns)).encode()).hexdigest()
+
+
+def entry(fd,name):
+    try:return os.stat(name,dir_fd=fd,follow_symlinks=False)
+    except FileNotFoundError:return None
+
+
+def remove_tree(fd,name):
+    st=os.stat(name,dir_fd=fd,follow_symlinks=False)
+    if stat.S_ISDIR(st.st_mode):
+        child=os.open(name,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW,dir_fd=fd)
+        try:
+            for part in os.listdir(child):remove_tree(child,part)
+        finally:os.close(child)
+        os.rmdir(name,dir_fd=fd)
+    else:os.unlink(name,dir_fd=fd)  # Remove links themselves; never traverse them.
+
+
+def manage_file(cfg,wid,r):
+    ws=workspace(cfg,wid);parts=relative(r.get('path'));action=r.get('action')
+    if action not in ('mkdir','rename','delete','save'):raise ValueError('invalid_file_action')
+    with workspace_change(cfg,wid),directory(ws,parts[:-1]) as fd:
+        old=entry(fd,parts[-1]);expected=r.get('version')
+        if action=='mkdir':
+            if old is not None:raise ValueError('file_exists')
+            os.mkdir(parts[-1],0o777,dir_fd=fd);os.chmod(parts[-1],0o777,dir_fd=fd,follow_symlinks=False)
+        else:
+            if expected is None:
+                if action!='save':raise ValueError('file_version_required')
+                if old is not None:raise ValueError('file_exists')
+            elif old is None or file_version(old)!=expected:raise ValueError('file_changed_refresh')
+            if action=='save':
+                content=r.get('content')
+                if not isinstance(content,str) or len(content.encode('utf-8'))>2*1024*1024 or '\x00' in content:
+                    raise ValueError('text_file_too_large_or_binary')
+                if old is not None and not stat.S_ISREG(old.st_mode):raise ValueError('regular_file_required')
+                write_file(ws,r['path'],content.encode('utf-8'))
+            elif action=='rename':
+                target=relative(r.get('destination'))
+                with directory(ws,target[:-1]) as dest:
+                    if entry(dest,target[-1]) is not None:raise ValueError('file_exists')
+                    os.rename(parts[-1],target[-1],src_dir_fd=fd,dst_dir_fd=dest)
+            else:
+                if r.get('confirmPath')!=r['path']:raise ValueError('file_delete_confirmation_required')
+                remove_tree(fd,parts[-1])
+    return {'changed':True,'path':r.get('destination') if action=='rename' else r['path']}
+
+
 def configuration():
     cfg=read_json(ROOT/'config.json')
     if cfg.get('format')!=1:raise ValueError('unsupported_server_configuration')
@@ -360,7 +418,7 @@ def publish(cfg,wid,name):
 def dispatch(cfg,r):
     op=r.get('operation')
     schemas={'health':set(),'workspace.create':set(),'file.read':{'path','offset','size'},'file.write':{'path','content'},
-        'file.list':{'path'},'job.submit':{'command','cpus','memory_gib','gpus','timeout','datasets'},
+        'file.list':{'path'},'file.manage':{'action','path','destination','content','version','confirmPath'},'job.submit':{'command','cpus','memory_gib','gpus','timeout','datasets'},
         'job.status':{'job'},'job.logs':{'job','cursor'},'job.cancel':{'job'},'job.artifacts':{'job'},
         'artifact.read':{'job','path','offset','size','version'},'dataset.publish':{'path'},'dataset.list':set(),
         'upload.begin':{'path','bytes','sha256'},'upload.chunk':{'upload','offset','data','sha256'},'upload.finish':{'upload'}}
@@ -371,7 +429,7 @@ def dispatch(cfg,r):
         try:s.connect(cfg['egress_socket']);ready=True
         except OSError:pass
         finally:s.close()
-        return {'ready':True,'region':'taiwan-utf8-v1','egress_socket':cfg['egress_socket'],'egress_ready':ready,
+        return {'ready':True,'region':'taiwan-utf8-v1','egress_socket':cfg['egress_socket'],'egress_ready':ready,'capabilities':{'fileManagement':1},
             'cpus':len(cfg['cpu_indices']),'memory_gib':cfg['memory_gib'],'gpus':len(cfg.get('gpu_indices',[]))}
     if op=='workspace.create':
         wid=uuid.uuid4().hex;p=pathlib.Path(cfg['state'])/'workspaces'/wid;p.mkdir(mode=0o777);p.chmod(0o777)
@@ -406,7 +464,7 @@ def dispatch(cfg,r):
         offset=r.get('offset',0);size=r.get('size',1024*1024)
         if type(offset) is not int or offset<0 or type(size) is not int or not 1<=size<=2*1024*1024:raise ValueError('invalid_range')
         with os.fdopen(open_file(ws,r.get('path')),'rb') as f:
-            st=os.fstat(f.fileno());version=hashlib.sha256(str((st.st_ino,st.st_size,st.st_mtime_ns)).encode()).hexdigest()
+            st=os.fstat(f.fileno());version=file_version(st)
             if r.get('version') and r['version']!=version:raise ValueError('artifact_changed')
             f.seek(offset);data=f.read(size);end=os.fstat(f.fileno());total=st.st_size
             if (st.st_size,st.st_mtime_ns)!=(end.st_size,end.st_mtime_ns):raise ValueError('artifact_changed')
@@ -414,8 +472,13 @@ def dispatch(cfg,r):
     if op=='file.write':
         text=r.get('content')
         if not isinstance(text,str) or len(text.encode())>2*1024*1024:raise ValueError('file_too_large')
-        write_file(ws,r.get('path'),text.encode('utf-8'))
+        with workspace_change(cfg,wid):write_file(ws,r.get('path'),text.encode('utf-8'))
         return {'written':True,'bytes':len(text.encode('utf-8'))}
+    if op=='file.manage':
+        try:return manage_file(cfg,wid,r)
+        except FileNotFoundError:raise ValueError('file_not_found') from None
+        except FileExistsError:raise ValueError('file_exists') from None
+        except PermissionError:raise ValueError('file_permission_denied') from None
     if op=='file.list':
         parts=() if r.get('path','.')=='.' else relative(r['path'])
         with directory(ws,parts) as fd:
@@ -424,16 +487,20 @@ def dispatch(cfg,r):
             result=[]
             for name in sorted(names):
                 st=os.stat(name,dir_fd=fd,follow_symlinks=False)
-                result.append({'name':name,'kind':'directory' if stat.S_ISDIR(st.st_mode) else 'file' if stat.S_ISREG(st.st_mode) else 'unavailable','bytes':st.st_size})
-            return {'entries':result}
+                result.append({'name':name,'kind':'directory' if stat.S_ISDIR(st.st_mode) else 'file' if stat.S_ISREG(st.st_mode) else 'unavailable','bytes':st.st_size,'version':file_version(st)})
+            return {'entries':result,'capabilities':{'fileManagement':1}}
     if op=='dataset.publish':return publish(cfg,wid,r['path'])
     if op=='dataset.list':
         return {'datasets':[{k:v for k,v in read_json(p/'manifest.json').items() if k!='files'} for p in (pathlib.Path(cfg['state'])/'datasets').iterdir() if re.fullmatch('[a-f0-9]{32}',p.name) and (p/'manifest.json').is_file()]}
     if op=='upload.begin':
-        relative(r['path'])
+        parts=relative(r['path'])
         if type(r['bytes']) is not int or not 0<=r['bytes']<=cfg.get('upload_max_bytes',100*1024**3) or not re.fullmatch('[a-f0-9]{64}',r['sha256']):raise ValueError('invalid_upload')
+        try:
+            with directory(ws,parts[:-1]) as fd:
+                if entry(fd,parts[-1]) is not None:raise ValueError('file_exists')
+        except FileNotFoundError:pass
         uid=uuid.uuid4().hex;folder=pathlib.Path(cfg['state'])/'uploads'/uid;folder.mkdir(mode=0o700)
-        save(folder/'meta.json',{'workspace':wid,'path':r['path'],'bytes':r['bytes'],'sha256':r['sha256']})
+        save(folder/'meta.json',{'workspace':wid,'path':r['path'],'bytes':r['bytes'],'sha256':r['sha256'],'exclusive':True})
         (folder/'content').touch(mode=0o600);return {'id':uid,'offset':0}
     if op.startswith('upload.'):
         folder=pathlib.Path(cfg['state'])/'uploads'/identity(r['upload']);meta=read_json(folder/'meta.json')
@@ -466,8 +533,16 @@ def dispatch(cfg,r):
             if file.stat().st_size!=meta['bytes'] or digest(file)!=meta['sha256']:raise ValueError('upload_incomplete')
             result={'path':meta['path'],'bytes':meta['bytes'],'sha256':meta['sha256']}
             parts=relative(meta['path']);file.chmod(0o666)
-            with directory(ws,parts[:-1],create=True) as destination,directory(folder) as source:
-                os.replace('content',parts[-1],src_dir_fd=source,dst_dir_fd=destination)
+            with workspace_change(cfg,wid),directory(ws,parts[:-1],create=True) as destination,directory(folder) as source:
+                if meta.get('exclusive'):
+                    # Hard-link commit is atomic and cannot replace a concurrently created file.
+                    try:os.link('content',parts[-1],src_dir_fd=source,dst_dir_fd=destination,follow_symlinks=False)
+                    except FileExistsError:
+                        staged=os.stat('content',dir_fd=source,follow_symlinks=False);final=entry(destination,parts[-1])
+                        if final is None or (staged.st_dev,staged.st_ino)!=(final.st_dev,final.st_ino):
+                            raise ValueError('file_exists') from None
+                    os.unlink('content',dir_fd=source)
+                else:os.replace('content',parts[-1],src_dir_fd=source,dst_dir_fd=destination)
             save(receipt,result)
         return result
     raise ValueError('unsupported_operation')

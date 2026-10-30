@@ -262,7 +262,7 @@ export async function startPanel(
         return;
       }
       const match = p.match(
-        /^\/api\/sessions\/([a-f0-9]{32})\/(messages|send|stop|settings|metadata|delete|files|upload-begin|upload-chunk|upload-finish|logs|artifacts|cancel|download|attachments|attach-begin|attach-chunk|attach-finish|attachment|cloud-file|cloud-file-meta)$/,
+        /^\/api\/sessions\/([a-f0-9]{32})\/(messages|send|stop|settings|metadata|delete|files|file-text|file-manage|upload-begin|upload-chunk|upload-finish|logs|artifacts|cancel|download|attachments|attach-begin|attach-chunk|attach-finish|attachment|cloud-file|cloud-file-meta)$/,
       );
       if (!match) throw new Error("route_not_found");
       const [, id, op] = match;
@@ -435,6 +435,45 @@ export async function startPanel(
         send(await remote.call("file.list", { path: location }));
         return;
       }
+      if (op === "file-text" && req.method === "GET") {
+        const location = url.searchParams.get("path");
+        if (!validPath(location)) throw new Error("invalid_path");
+        const file = await remote.call("file.read", {
+          path: location,
+          offset: 0,
+          size: 2 * 1024 * 1024,
+        });
+        const bytes = Buffer.from(file.data, "base64");
+        if (file.total !== bytes.length || bytes.length > 2 * 1024 * 1024)
+          throw new Error("text_file_too_large_or_binary");
+        if (
+          crypto.createHash("sha256").update(bytes).digest("hex") !==
+          file.sha256
+        )
+          throw new Error("download_checksum");
+        let text;
+        try {
+          text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+        } catch {
+          throw new Error("text_file_too_large_or_binary");
+        }
+        if (text.includes("\0"))
+          throw new Error("text_file_too_large_or_binary");
+        send({ text, version: file.version });
+        return;
+      }
+      if (op === "file-manage" && req.method === "POST") {
+        const input = await body(req);
+        if (r.pending || ["thinking", "tool"].includes(r.status))
+          throw new Error("session_busy");
+        if (
+          !validPath(input.path) ||
+          (input.destination !== undefined && !validPath(input.destination))
+        )
+          throw new Error("invalid_path");
+        send(await remote.call("file.manage", input));
+        return;
+      }
       if (op === "logs" && req.method === "GET") {
         const cursor = Number(url.searchParams.get("cursor") || 0);
         if (!Number.isSafeInteger(cursor) || cursor < 0)
@@ -458,8 +497,13 @@ export async function startPanel(
           input.name.includes("/")
         )
           throw new Error("invalid_filename");
-        const dest =
-          "uploads/" + crypto.randomBytes(8).toString("hex") + "/" + input.name;
+        const directory = input.directory ?? ".";
+        if (directory !== "." && !validPath(directory))
+          throw new Error("invalid_path");
+        const listing = await remote.call("file.list", { path: directory });
+        if (!listing.capabilities?.fileManagement)
+          throw new Error("worker_update_required");
+        const dest = (directory === "." ? "" : directory + "/") + input.name;
         const result = await remote.call("upload.begin", {
           path: dest,
           bytes: input.bytes,

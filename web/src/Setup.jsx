@@ -391,7 +391,7 @@ export default function Setup({ onClose, onChange, guideOnly = false }) {
           <div className="card">
             <h2>服务器初始化</h2>
             {state?.servers
-              .filter((s) => s.mode !== "wsl")
+              .filter((s) => s.mode !== "wsl" || s.initialized)
               .map((s) => (
                 <button
                   key={s.name}
@@ -441,6 +441,17 @@ export default function Setup({ onClose, onChange, guideOnly = false }) {
                     </div>
                   )}
                 </>
+              )}
+            {selected &&
+              state?.servers.find((s) => s.name === selected)?.initialized && (
+                <button
+                  disabled={disabled}
+                  onClick={() =>
+                    run("server-update-worker", { name: selected })
+                  }
+                >
+                  更新执行器
+                </button>
               )}
             <p>
               初始化包含执行环境、出口通道与隔离自测。验证通过后才可建立会话。
@@ -902,6 +913,12 @@ export default function Setup({ onClose, onChange, guideOnly = false }) {
           <p>
             模型、effort 和工具默认收起。点击设置或输入 /model、/tools
             展开，应用后自动收起。
+          </p>
+          <h2>工作区文件</h2>
+          <p>
+            文件页可上传到当前文件夹、新建文件或文件夹、编辑 UTF-8
+            文本、重命名或移动、确认删除、预览和下载。
+            重名不会自动覆盖，任务运行时不修改项目文件。已有服务器可在服务器页更新执行器，保留环境、任务和数据，不重启运行中的进程。
           </p>
           <h2>会话工具与扩展</h2>
           <p>

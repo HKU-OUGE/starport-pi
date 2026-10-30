@@ -23,6 +23,7 @@ def module(name,file):
     spec=importlib.util.spec_from_file_location(name,file);value=importlib.util.module_from_spec(spec);spec.loader.exec_module(value);return value
 worker=module('worker',BASE/'server/worker.py')
 installer=module('installer',BASE/'server/install.py')
+updater=module('updater',BASE/'server/update_worker.py')
 
 
 class WorkerTests(unittest.TestCase):
@@ -99,6 +100,73 @@ class WorkerTests(unittest.TestCase):
     def test_unknown_operator_fields_rejected(self):
         with self.assertRaisesRegex(ValueError,'unsupported_operation'):self.call('file.read',path='x',host='/')
         with self.assertRaisesRegex(ValueError,'unsupported_operation'):self.call('shell.local',command='true')
+
+    def test_manage_files_with_versions_and_scope(self):
+        self.call('file.manage',action='mkdir',path='data')
+        self.call('file.manage',action='save',path='data/file.txt',content='original')
+        listing=self.call('file.list',path='data')
+        self.assertEqual(listing['capabilities']['fileManagement'],1)
+        version=listing['entries'][0]['version']
+        self.call('file.manage',action='save',path='data/file.txt',content='updated',version=version)
+        with self.assertRaisesRegex(ValueError,'file_changed_refresh'):
+            self.call('file.manage',action='save',path='data/file.txt',content='stale',version=version)
+        current=self.call('file.read',path='data/file.txt')['version']
+        self.call('file.manage',action='rename',path='data/file.txt',destination='moved.txt',version=current)
+        self.assertEqual((self.ws/'moved.txt').read_text(),'updated')
+        with self.assertRaisesRegex(ValueError,'file_exists'):
+            self.call('file.manage',action='save',path='moved.txt',content='overwrite')
+        current=self.call('file.read',path='moved.txt')['version']
+        with self.assertRaisesRegex(ValueError,'confirmation'):
+            self.call('file.manage',action='delete',path='moved.txt',version=current)
+        self.call('file.manage',action='delete',path='moved.txt',version=current,confirmPath='moved.txt')
+        for path in ['.','../outside','/etc/passwd','data/../../outside']:
+            with self.assertRaises(ValueError):self.call('file.manage',action='mkdir',path=path)
+        secret=self.root/'secret';secret.write_text('keep')
+        (self.ws/'data/link').symlink_to(secret)
+        version=self.call('file.list')['entries'][0]['version']
+        self.call('file.manage',action='delete',path='data',version=version,confirmPath='data')
+        self.assertEqual(secret.read_text(),'keep');self.assertFalse((self.ws/'data').exists())
+
+    def test_upload_collision_and_active_workspace_preserve_staged_bytes(self):
+        data=b'complete upload';h=hashlib.sha256(data).hexdigest()
+        grant=self.call('upload.begin',path='file.bin',bytes=len(data),sha256=h)
+        self.call('upload.chunk',upload=grant['id'],offset=0,data=base64.b64encode(data).decode(),sha256=h)
+        record=self.root/'jobs'/('b'*32)/'status.json'
+        worker.save(record,{'workspace':self.wid,'released':False})
+        with self.assertRaisesRegex(ValueError,'workspace_busy'):
+            self.call('upload.finish',upload=grant['id'])
+        with self.assertRaisesRegex(ValueError,'workspace_busy'):
+            self.call('file.manage',action='mkdir',path='blocked')
+        worker.save(record,{'workspace':self.wid,'released':True})
+        (self.ws/'file.bin').write_bytes(b'new content')
+        with self.assertRaisesRegex(ValueError,'file_exists'):self.call('upload.finish',upload=grant['id'])
+        self.assertEqual((self.ws/'file.bin').read_bytes(),b'new content')
+        (self.ws/'file.bin').unlink()
+        staged=self.root/'uploads'/grant['id']/'content'
+        os.link(staged,self.ws/'file.bin')  # Simulate acknowledgement loss between link and cleanup.
+        result=self.call('upload.finish',upload=grant['id'])
+        self.assertEqual(result['sha256'],h);self.assertFalse(staged.exists())
+        with self.assertRaisesRegex(ValueError,'file_exists'):
+            self.call('upload.begin',path='file.bin',bytes=len(data),sha256=h)
+
+    def test_operator_worker_update_preserves_configuration_and_active_state(self):
+        install=self.root/'installation';install.mkdir()
+        (install/'config.json').write_text(json.dumps({'format':1,'state':str(self.root)}))
+        (install/'worker.py').write_text('old = True\n')
+        (self.ws/'project.txt').write_text('keep')
+        record=self.root/'jobs'/('c'*32)/'status.json'
+        worker.save(record,{'workspace':self.wid,'released':False})
+        before=record.read_bytes();config=(install/'config.json').read_bytes()
+        source=b'new = True\n';h=hashlib.sha256(source).hexdigest()
+        with self.assertRaisesRegex(ValueError,'checksum'):updater.apply(install,source,'0'*64)
+        result=updater.apply(install,source,h)
+        self.assertFalse(result['restartRequired'])
+        self.assertEqual((install/'worker.py').read_bytes(),source)
+        self.assertEqual((install/'worker.py.previous').read_text(),'old = True\n')
+        updater.apply(install,source,h)
+        self.assertEqual((install/'worker.py.previous').read_text(),'old = True\n')
+        self.assertEqual((install/'config.json').read_bytes(),config)
+        self.assertEqual(record.read_bytes(),before);self.assertEqual((self.ws/'project.txt').read_text(),'keep')
 
 
 class ArchiveTests(unittest.TestCase):

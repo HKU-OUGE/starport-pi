@@ -190,3 +190,28 @@ Local checks: 53 Node tests, 13 Python tests, production web build and source
 privacy audit passed. These checks do not initialize servers or restart existing
 installations. The build retains the existing size warning for lazy PDF/Markdown
 chunks.
+
+## Workspace files and worker updates (0.4.2)
+
+Browser validation used a separate loopback panel backed by the actual Python
+file RPC implementation and disposable workspaces. A 1,615,021-byte file was
+uploaded in chunks directly into `assets/` and downloaded again. Source, stored
+file and browser download share SHA-256
+`48f916cdd3aa0a6f09fed1667acf5e2928add86292343f32b9f2e899c2da1ca0`.
+No random upload subdirectory was created. Duplicate upload kept the original
+file and displayed a conflict. Folder creation, text creation/editing, rename,
+cross-directory move, navigation and delete confirmation/cancellation were
+exercised at 1280 × 720 and 390 × 844. There were no browser script errors or
+horizontal overflow. Deletion itself is tested only on disposable API fixtures.
+
+Python tests verify scoped paths, stale edit rejection, no traversal through
+links, delete confirmation, unreleased-workspace guards, atomic upload commit,
+recovery between link and receipt, and removal of the temporary upload body.
+The updater validates its checksum, atomically replaces only `worker.py`, keeps
+a previous copy across repeated updates, and preserves configuration, workspace
+files and active job records. Native client tests verify fixed SSH and WSL2
+entrypoints and the post-update capability check. Real remote installations were
+not updated during this validation.
+
+54 Node tests, 16 Linux Python tests, production web build and source publication
+audit passed locally. The existing lazy PDF/Markdown chunk-size warning remains.

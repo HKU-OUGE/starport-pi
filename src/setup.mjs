@@ -39,6 +39,7 @@ import {
 import { installLocal } from "./install-local.mjs";
 import { closeLocalBridges } from "./local-bridge.mjs";
 import { Addons } from "./addons.mjs";
+import { updateWorker } from "./update-worker.mjs";
 
 export function parseSshCommand(value) {
   if (
@@ -563,6 +564,14 @@ export class Setup {
           fingerprints: keys,
           next: "server-initialize",
         };
+      });
+    if (action === "server-update-worker")
+      return this.start("server-update-worker", async (stage) => {
+        const name = id(input.name);
+        stage("updating_worker");
+        return updateWorker({ ...c, activeServer: name }, this.root, {
+          execute: this.runProcess,
+        });
       });
     if (action === "server-initialize")
       return this.start("server-initialize", async (stage) => {
