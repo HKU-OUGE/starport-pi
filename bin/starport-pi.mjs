@@ -6,6 +6,7 @@ import {configure,operatorCommand,secretPrompt} from '../src/console.mjs';
 import {Remote} from '../src/transport.mjs';
 import {requireModelProxy} from '../src/network.mjs';
 import {makeSession} from '../src/session.mjs';
+import {spawn} from 'node:child_process';
 
 async function main() {
   const action=process.argv[2];
@@ -13,8 +14,14 @@ async function main() {
   if(action==='--help'){console.log('starport-pi [configure | auth | panel [PORT] | verify-server | doctor | probe | --print MESSAGE]\nInteractive: /starport /network /servers /workspace /tunnel /upload /download /help');return;}
   const root=stateRoot();let config=load(root);
   if(action==='panel'){
-    const {startPanel}=await import('../src/panel.mjs');const app=await startPanel(root,{port:Number(process.argv[3]||18900)});
+    const {startPanel}=await import('../src/panel.mjs');const app=await startPanel(root,{port:Number(process.argv.slice(3).find(x=>/^\d+$/.test(x))||18900)});
     console.log('Starport Pi: http://127.0.0.1:'+app.port+'\nLocal access key: '+app.key+'\nKeep this key private. Cloudflare mode requires Access login instead.');
+    if(process.argv.includes('--open')){
+      const url='http://127.0.0.1:'+app.port+'/';
+      const program=process.platform==='win32'?'rundll32.exe':process.platform==='darwin'?'open':'xdg-open';
+      const browser=spawn(program,process.platform==='win32'?['url.dll,FileProtocolHandler',url]:[url],{stdio:'ignore',windowsHide:true,detached:true,shell:false});
+      browser.on('error',()=>console.log('Open the loopback URL above in your browser.'));browser.unref();
+    }
     for(const signal of ['SIGINT','SIGTERM'])process.once(signal,()=>app.close().then(()=>process.exit()));return;
   }
   if(action==='configure'){await configure(root,process.argv[3]||'menu');return;}
