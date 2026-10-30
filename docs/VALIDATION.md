@@ -85,3 +85,25 @@ Local v0.3.1 checks: 25 Node tests and 13 Python tests passed. The browser
 connection-update flow changed a deliberately invalid fixture ID while retaining
 its uninitialized state and existing settings. Deployment-specific validation
 records remain private and are not part of this public repository.
+
+## v0.3.2 resumable installation downloads
+
+The installer shares one downloader for rootfs, gVisor and tools. Tests exercise
+real HTTP streams with an interrupted body, a retained legacy partial file,
+Range/If-Range, a server ignoring Range, an invalid Content-Range, checksum
+failure, renewed signed redirects, idle timeout, continuous slow progress,
+concurrent-cache exclusion, cache reuse and precise safe error codes. Proxy
+configuration remains the same across retries. A failed state-file write does
+not crash the panel or erase an already classified download error.
+
+A live Linux download through an existing loopback proxy resumed the public
+v0.1.0 rootfs at byte 111253913 (106.1 MiB). The release CDN returned HTTP 206,
+transferred only the remaining 53914995 bytes, and produced the expected
+165168908-byte file with the pinned SHA-256. The test cache was removed after
+verification. This validates download/resume, not installation on another host.
+
+Local checks passed: 36 Node tests, 13 Python tests, web build and publication
+audit. Browser checks used fixture operation records to verify retry counts,
+saved bytes, a specific disk-space error, and automatic transition to resumed
+progress. Desktop and 390×844 mobile layouts had no framework error overlay,
+console errors or horizontal overflow. The fixture did not initialize a server.

@@ -224,7 +224,18 @@ export class Setup {
         op.status = "failed";
         op.error = safeError(e);
       })
-      .finally(() => this.record(op));
+      .finally(() => {
+        try {
+          this.record(op);
+        } catch {
+          // A full or unwritable state disk must not turn an already classified
+          // failure into an unhandled rejection that takes down the panel.
+          if (op.status !== "failed") {
+            op.status = "failed";
+            op.error = "setup_state_write_failed";
+          }
+        }
+      });
     return { operation: op.id };
   }
   async dispatch(action, input = {}) {
@@ -609,8 +620,8 @@ export class Setup {
             rootfsRelease.sha256,
             {
               proxyPort: c.proxy.port,
-              onProgress: (bytes, total) =>
-                stage("downloading_rootfs", { bytes, total }),
+              onProgress: (bytes, total, detail) =>
+                stage("downloading_rootfs", { bytes, total, ...detail }),
             },
           );
           stage("installing_isolated_worker");
@@ -618,6 +629,8 @@ export class Setup {
           save(c, this.root);
           await this.install(selected, this.root, archive, {
             ...server.budget,
+            onDownloadProgress: (bytes, total, detail) =>
+              stage("downloading_runtime", { bytes, total, ...detail }),
             onProgress: (bytes, total) =>
               stage("uploading_runtime", { bytes, total }),
           });

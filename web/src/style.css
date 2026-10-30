@@ -753,6 +753,13 @@ code {
 .operations {
   margin-top: 22px;
 }
+.operations .badge {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.operations .list-row > div {
+  min-width: 0;
+}
 .success {
   color: var(--accent) !important;
 }

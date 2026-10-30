@@ -103,12 +103,15 @@ export async function installLocal(
       rootfsRelease.sha256,
       {
         proxyPort: c.proxy.port,
-        onProgress: (bytes, total) =>
-          stage("downloading_rootfs", { bytes, total }),
+        onProgress: (bytes, total, detail) =>
+          stage("downloading_rootfs", { bytes, total, ...detail }),
       },
     );
     stage("downloading_runtime");
-    const runtime = await downloadRuntime(c, root, "x86_64");
+    const runtime = await downloadRuntime(c, root, "x86_64", {
+      onProgress: (bytes, total, detail) =>
+        stage("downloading_runtime", { bytes, total, ...detail }),
+    });
     const bootstrap = path.join(dir, "bootstrap.tar");
     // Only rebuild our own unregistered import archive; never touch a VHD or distro.
     if (fs.existsSync(bootstrap)) fs.rmSync(bootstrap);

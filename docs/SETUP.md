@@ -46,6 +46,10 @@ bash scripts/build-rootfs.sh
 - 新增使用者专属目录，记录 runtime 杂凑；不修改原有 Python 环境、Docker、SSH 或其他服务。
 - 已存在安装时拒绝覆盖，避免影响执行中的任务。
 
+网页初始化会自动下载镜像。下载中断时保留 `install-cache/*.partial`，最多自动尝试 5 次；再次初始化也会从已有缓存接续。下载源不支持 Range 时才重新下载整份文件。每次连接有 2 分钟无数据超时和 30 分钟保护上限，持续传输超过 5 分钟不会被旧的固定超时截断。完整 SHA-256／SHA-512 校验通过后才进入安装；重试沿用所选代理，不会转为直连。
+
+部署进度显示续传、重试次数与失败原因。代理断开先恢复所选出口；`download_disk_full` 需释放缓存磁盘空间；证书或校验失败不能跳过验证。更新工作台后重新启动面板并在服务器页重试即可，无需清空缓存或再次导入配置。默认 Windows 缓存位于 `%LOCALAPPDATA%\StarportPi\install-cache`；使用 `STARPORT_PI_STATE` 时，以该配置目录为准。
+
 需要离线 runtime 时，管理员可在服务器使用下列方式；指定的 `runsc` 旁必须有同一版本的 `gvisor-bin`：
 
 ```bash

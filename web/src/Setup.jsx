@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef } from "react";
 import { setup, setAdmin } from "./api";
+import { operationProgress } from "./operation-progress.mjs";
 
 const initialServer = {
   name: "server-alpha",
@@ -933,6 +934,12 @@ export default function Setup({ onClose, onChange, guideOnly = false }) {
             执行，但持有同一 SSH 私钥的人仍可使用其他 SSH
             客户端访问该账户允许的文件。向普通使用者提供服务时，需要另设受限账户或服务器强制命令。
           </p>
+          <h3>下载中断</h3>
+          <p>
+            镜像与运行时下载会自动重试并接续缓存；持续收到数据时不会在五分钟后停止。
+            重试后仍失败，先按错误提示检查出口或磁盘，再到服务器页重新初始化。
+            保留原配置目录中的 install-cache，不必删除已下载的部分。文件通过完整校验后才会安装。
+          </p>
           <h3>SSH 密钥</h3>
           <pre>
             {
@@ -966,15 +973,8 @@ export default function Setup({ onClose, onChange, guideOnly = false }) {
             <div key={op.id} className="list-row">
               <div>
                 <b>{op.kind}</b>
-                <small>
-                  {op.stage}
-                  {op.detail?.bytes !== undefined
-                    ? ` · ${(op.detail.bytes / 1048576).toFixed(1)} MiB${op.detail.total ? " / " + (op.detail.total / 1048576).toFixed(1) + " MiB" : ""}`
-                    : ""}
-                  {op.error ? " · " + op.error : ""}
-                  {op.result?.updated?.length
-                    ? " · 已更新：" + op.result.updated.join("、")
-                    : ""}
+                <small title={op.error || op.detail?.error || undefined}>
+                  {operationProgress(op)}
                 </small>
               </div>
               <span className={"badge " + op.status}>

@@ -2,89 +2,13 @@ import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import { gunzipSync } from "node:zlib";
-import { Agent, ProxyAgent, fetch } from "undici";
 import { privateDir, writePrivate } from "./config.mjs";
 import { processCall } from "./transport.mjs";
 const assets = JSON.parse(
   fs.readFileSync(new URL("./tool-assets.json", import.meta.url), "utf8"),
 );
-export async function verifiedDownload(
-  root,
-  name,
-  url,
-  sha256,
-  { proxyPort, onProgress = () => {} } = {},
-) {
-  const dir = privateDir(path.join(root, "install-cache")),
-    dest = path.join(dir, name);
-  const hashFile = async (file) => {
-    const h = crypto.createHash("sha256");
-    for await (const b of fs.createReadStream(file)) h.update(b);
-    return h.digest("hex");
-  };
-  if (fs.existsSync(dest)) {
-    if ((await hashFile(dest)) === sha256) return dest;
-    throw new Error("download_cache_checksum_failed");
-  }
-  const dispatcher = proxyPort
-    ? new ProxyAgent("http://127.0.0.1:" + proxyPort)
-    : new Agent();
-  let fd;
-  try {
-    let current = url,
-      r;
-    for (let n = 0; n < 6; n++) {
-      const u = new URL(current);
-      if (
-        u.protocol !== "https:" ||
-        u.username ||
-        u.password ||
-        ![
-          "github.com",
-          "release-assets.githubusercontent.com",
-          "objects.githubusercontent.com",
-          "help-static-aliyun-doc.aliyuncs.com",
-        ].includes(u.hostname)
-      )
-        throw new Error("download_host_not_allowed");
-      r = await fetch(u, {
-        dispatcher,
-        redirect: "manual",
-        signal: AbortSignal.timeout(300000),
-      });
-      if ([301, 302, 303, 307, 308].includes(r.status)) {
-        current = new URL(r.headers.get("location"), u).href;
-        await r.body.cancel();
-        continue;
-      }
-      break;
-    }
-    if (!r.ok) throw new Error("tool_download_failed");
-    fd = fs.openSync(dest + ".partial", "w", 0o600);
-    const hash = crypto.createHash("sha256");
-    let total = 0,
-      last = 0;
-    for await (const b of r.body) {
-      total += b.length;
-      if (total > 512 * 1024 * 1024) throw new Error("download_too_large");
-      hash.update(b);
-      fs.writeSync(fd, b);
-      if (Date.now() - last > 250) {
-        onProgress(total, Number(r.headers.get("content-length")) || 0);
-        last = Date.now();
-      }
-    }
-    fs.closeSync(fd);
-    fd = undefined;
-    if (hash.digest("hex") !== sha256)
-      throw new Error("download_checksum_failed");
-    fs.renameSync(dest + ".partial", dest);
-    return dest;
-  } finally {
-    if (fd !== undefined) fs.closeSync(fd);
-    await dispatcher.close();
-  }
-}
+export { verifiedDownload } from "./download.mjs";
+import { verifiedDownload } from "./download.mjs";
 export async function installTool(root, name, options = {}) {
   const asset = assets[name]?.[process.platform + "-" + process.arch];
   if (!asset) throw new Error("unsupported_tool_platform");
