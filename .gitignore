@@ -18,3 +18,4 @@ dist/
 coverage/
 .DS_Store
 starport-pi.cmd
+web-dist/

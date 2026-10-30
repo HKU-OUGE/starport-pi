@@ -6,7 +6,7 @@ jobs:
   client:
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -20,13 +20,23 @@ jobs:
       - if: runner.os != 'Windows'
         run: npm ci --ignore-scripts --no-audit --no-fund
       - if: runner.os != 'Windows'
+        run: npm run build
+      - if: runner.os != 'Windows'
         run: npm test
       - if: runner.os == 'Windows'
         shell: pwsh
-        run: '& ./scripts/install.ps1 -InstallPrerequisites:$false'
+        run: '& ./scripts/install.ps1 -InstallPrerequisites:$false -LaunchPanel:$false'
       - if: runner.os == 'Windows'
         shell: cmd
         run: starport-pi.cmd --version
       - if: runner.os == 'Linux'
         run: npm run test:server
       - run: python scripts/audit_source.py
+      - if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Get-ChildItem scripts/*.ps1 | ForEach-Object {
+            $ParseErrors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$null, [ref]$ParseErrors) | Out-Null
+            if ($ParseErrors.Count) { throw ($ParseErrors | Out-String) }
+          }

@@ -1,0 +1,7 @@
+{
+  "zone": "example.com",
+  "prefix": "console",
+  "port": 18900,
+  "allowedEmails": ["owner@example.invalid"],
+  "tokenFile": "./api-token"
+}

@@ -6,5 +6,6 @@ command -v python3 >/dev/null
 command -v ssh >/dev/null
 cd "$repo"
 npm ci --ignore-scripts --no-audit --no-fund
+npm run build
 npm test
 printf 'Ready. Run node bin/starport-pi.mjs configure, then node bin/starport-pi.mjs auth.\n'

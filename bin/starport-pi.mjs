@@ -9,9 +9,14 @@ import {makeSession} from '../src/session.mjs';
 
 async function main() {
   const action=process.argv[2];
-  if(action==='--version'){console.log('Starport Pi 0.1.0');return;}
-  if(action==='--help'){console.log('starport-pi [configure | auth | verify-server | doctor | probe | --print MESSAGE]\nInteractive: /starport /network /servers /workspace /tunnel /upload /download /help');return;}
+  if(action==='--version'){console.log('Starport Pi 0.2.0');return;}
+  if(action==='--help'){console.log('starport-pi [configure | auth | panel [PORT] | verify-server | doctor | probe | --print MESSAGE]\nInteractive: /starport /network /servers /workspace /tunnel /upload /download /help');return;}
   const root=stateRoot();let config=load(root);
+  if(action==='panel'){
+    const {startPanel}=await import('../src/panel.mjs');const app=await startPanel(root,{port:Number(process.argv[3]||18900)});
+    console.log('Starport Pi: http://127.0.0.1:'+app.port+'\nLocal access key: '+app.key+'\nKeep this key private. Cloudflare mode requires Access login instead.');
+    for(const signal of ['SIGINT','SIGTERM'])process.once(signal,()=>app.close().then(()=>process.exit()));return;
+  }
   if(action==='configure'){await configure(root,process.argv[3]||'menu');return;}
   if(action==='auth') {
     const key=await secretPrompt('Anthropic API Key（隱藏輸入）: ');

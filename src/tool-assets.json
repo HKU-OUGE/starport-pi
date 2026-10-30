@@ -1,0 +1,78 @@
+{
+  "mihomo": {
+    "linux-x64": {
+      "url": "https://github.com/MetaCubeX/mihomo/releases/download/v1.19.33/mihomo-linux-amd64-v1-v1.19.33.gz",
+      "sha256": "8ec92e7b2fdc6b853ba00156bab7e4e965c8b0d843b8c4ac8ab98795f02ad524",
+      "format": "gz"
+    },
+    "win32-x64": {
+      "url": "https://github.com/MetaCubeX/mihomo/releases/download/v1.19.33/mihomo-windows-amd64-v1-v1.19.33.zip",
+      "sha256": "fb0b960eff568459502d4ebe53e9cca203053d86ec9024fe935f19615d74d9aa",
+      "format": "zip"
+    },
+    "darwin-x64": {
+      "url": "https://github.com/MetaCubeX/mihomo/releases/download/v1.19.33/mihomo-darwin-amd64-v1-v1.19.33.gz",
+      "sha256": "61f979d6aae3deffe4e3895161349c3d9189149eef88c5aceb7c6d4a7270a78d",
+      "format": "gz"
+    },
+    "darwin-arm64": {
+      "url": "https://github.com/MetaCubeX/mihomo/releases/download/v1.19.33/mihomo-darwin-arm64-v1.19.33.gz",
+      "sha256": "060b64b0f2c9a310831db0fe4adb2878de67bfa606c311813c1f13966aa504b6",
+      "format": "gz"
+    },
+    "linux-arm64": {
+      "url": "https://github.com/MetaCubeX/mihomo/releases/download/v1.19.33/mihomo-linux-arm64-v1.19.33.gz",
+      "sha256": "ba408b317080ee265c46cb923a50018c1b82cbd708551cdd46a1e3e307396187",
+      "format": "gz"
+    }
+  },
+  "cloudflared": {
+    "linux-x64": {
+      "url": "https://github.com/cloudflare/cloudflared/releases/download/2026.10.6/cloudflared-linux-amd64",
+      "sha256": "1d356dac769d0dbf62ebe588c4034824bbff98d5790c2f844cc99e0e2f57462d",
+      "format": "binary"
+    },
+    "win32-x64": {
+      "url": "https://github.com/cloudflare/cloudflared/releases/download/2026.10.6/cloudflared-windows-amd64.exe",
+      "sha256": "d521b3bf68982165f0d06d76732f22d9a105ef057ff3ae4c0986f3a23190950f",
+      "format": "binary"
+    },
+    "darwin-x64": {
+      "url": "https://github.com/cloudflare/cloudflared/releases/download/2026.10.6/cloudflared-darwin-amd64.tgz",
+      "sha256": "6c04a13835ca5ff29a0c6f58d17d1f3956aad1b7df1631f5b5efbc06269deded",
+      "format": "tar"
+    },
+    "darwin-arm64": {
+      "url": "https://github.com/cloudflare/cloudflared/releases/download/2026.10.6/cloudflared-darwin-arm64.tgz",
+      "sha256": "ea1e5105d35bbe16cee5b2f7b4742059ada341fbd35938ed827c24b85efa51c8",
+      "format": "tar"
+    },
+    "linux-arm64": {
+      "url": "https://github.com/cloudflare/cloudflared/releases/download/2026.10.6/cloudflared-linux-arm64",
+      "sha256": "0ae0e179475b2c77651a718d2b376e0151f4fca5954702a84f02843a4d5fcac0",
+      "format": "binary"
+    }
+  },
+  "proxyclient": {
+    "linux-x64": {
+      "url": "https://help-static-aliyun-doc.aliyuncs.com/file-manage-files/zh-CN/20221031/sbig/proxyclient",
+      "sha256": "a3e7544f1f40d8fa06037e7a0a64c727ff565ccd839bc08f981998176c777eef",
+      "format": "binary"
+    },
+    "darwin-x64": {
+      "url": "https://help-static-aliyun-doc.aliyuncs.com/file-manage-files/zh-CN/20221031/vcbz/proxyclient",
+      "sha256": "71421be44905a26f33fd197c9eb6bf6f6b92cdafc3f9f507d1511f6f50920e02",
+      "format": "binary"
+    },
+    "darwin-arm64": {
+      "url": "https://help-static-aliyun-doc.aliyuncs.com/file-manage-files/zh-CN/20250721/yymvxh/proxyclient",
+      "sha256": "e0f452c92ee540fd5320acbc7677b416cfa35616c453a238b6790c580e392e21",
+      "format": "binary"
+    },
+    "win32-x64": {
+      "url": "https://help-static-aliyun-doc.aliyuncs.com/file-manage-files/zh-CN/20230529/iwcp/proxyclient.exe",
+      "sha256": "e3cd8685aad18a2a30acf40cc8f880d41d078282a55cfb611a4acf36d5c22690",
+      "format": "binary"
+    }
+  }
+}

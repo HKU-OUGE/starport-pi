@@ -2,7 +2,7 @@
 
 **Windows 原生 Pi 工作台，命令交給遠端。**
 
-使用 Pi SDK 與 Claude API，在同一個終端設定訂閱、選擇出口、連接伺服器、編輯專案和查看任務。Windows 不需要 WSL2、Docker 或本機虛擬機；執行環境建立在 Linux 伺服器上。
+使用 Pi SDK 與 Claude API，在網頁或終端設定訂閱、選擇出口、連接伺服器、編輯專案和查看任務。Windows 不需要 WSL2、Docker 或本機虛擬機；執行環境建立在 Linux 伺服器上。
 
 ![Starport Pi topology](docs/topology.svg)
 
@@ -10,7 +10,7 @@
 | --- | --- |
 | Windows 10/11、Linux、macOS | 現有 Linux／阿里 DSW 實例 |
 | Pi SDK、Claude API、模型與 effort 選擇 | gVisor 工作區、CPU／記憶體／GPU 預算 |
-| 常見訂閱匯入、節點選擇與更新 | 專案檔案、即時日誌、取消、產物下載 |
+| 部署向導、訂閱管理、Cloudflare 遠端入口 | 專案檔案、即時日誌、取消、產物下載 |
 | 人工選擇檔案上傳，分塊續傳及 SHA-256 | 發布只讀資料版本，按資料 ID 使用 |
 
 ## Windows 開始使用
@@ -19,28 +19,15 @@
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\install.ps1
-.\starport-pi.cmd configure
-.\starport-pi.cmd auth
-.\starport-pi.cmd
 ```
 
-安裝器檢查 Node.js 22.19+、Python 與 OpenSSH，必要時透過 winget 安裝 Node.js／Python。`auth` 使用自己的 Anthropic API Key；此版接入 API 計費。
+安裝後開啟 **http://127.0.0.1:18900/**，使用啟動視窗中的存取碼登入。
 
-進入工作台後：
+在「部署與管理」完成 **訂閱 → 伺服器 → 模型 → 遠端入口**。貼上 SSH 指令與私鑰，或填入 DSW ProxyClient 資訊；核對主機指紋後，系統自動安裝隔離環境並驗證。Cloudflare Token、網域前綴與信箱名單也可直接在面板設定。
 
-```text
-/network          匯入訂閱，選節點，啟動／套用出口
-/servers          新增 SSH 或阿里 DSW 連線
-/verify-server    首次核對 SSH 主機金鑰
-/install-server   上傳 rootfs，設定伺服器資源預算
-/workspace        建立遠端專案
-/tunnel           接通受控出口
-/status           查看服務狀態
-```
+網頁提供會話、思考／工具狀態、任務、增量日誌和檔案。手機可透過個別授權的 Tunnel + Access 網址使用。
 
-然後輸入一般訊息即可開始工作。`/upload`、`/download` 管理檔案，`/model` 切換模型和 effort，`/gpu` 檢查並配置 GPU，`/help` 列出入口。
-
-Linux／macOS：`bash scripts/install.sh`，再執行 `npm start`。WSL2 為可選項：[Windows 與 WSL2](docs/WINDOWS.md)。
+後續啟動：`.\starport-pi.cmd panel`。Linux／macOS：`bash scripts/install.sh`，再執行 `npm run panel`。終端工作台仍可用 `npm start`。
 
 ## 遠端預設
 
@@ -50,6 +37,8 @@ Linux／macOS：`bash scripts/install.sh`，再執行 `npm start`。WSL2 為可�
 
 ## 指引
 
+- [網頁部署向導、金鑰與遠端存取](docs/REMOTE_ACCESS.md)
+- [Agent 安裝入口](AGENTS.md) · [安裝 Skill](skills/starport-setup/SKILL.md)
 - [完整安裝與伺服器配置](docs/SETUP.md)
 - [操作、檔案與共享資料](docs/USAGE.md)
 - [隔離邊界與資源管理](SECURITY.md)

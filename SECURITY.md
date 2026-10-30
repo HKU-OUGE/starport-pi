@@ -32,3 +32,23 @@ SSH 連線帳號是可信管理帳號。多名不互信的使用者應使用不�
 `python scripts/audit_source.py` 掃描候選檔案中的真實路徑、AccessKey、私鑰、個人郵件、執行期目錄和大型產物。設定及訂閱位於作業系統使用者資料目錄，Windows 使用 ACL、POSIX 使用 0700／0600。不要將操作端私有 state 目錄加入 Git。
 
 上游參考：[Pi](https://github.com/earendil-works/pi)、[gVisor 安裝](https://gvisor.dev/docs/user_guide/install/)、[rootless](https://gvisor.dev/docs/user_guide/rootless/)、[GPU](https://gvisor.dev/docs/user_guide/gpu/)、[Mihomo API](https://wiki.metacubex.one/en/api/)。
+
+## Web deployment control plane
+
+The panel binds only to loopback. Local login uses a private random key. Cloudflare
+mode requires a verified Access JWT; the old local cookie cannot bypass it. Remote
+setup endpoints additionally require the operator key. Model tools do not include
+setup, local key search, cloud enrollment or subscription operations.
+
+Use distinct OS users/profiles and distinct remote worker users or instances for
+unrelated people. An Access email list is a panel-wide permission, not a row-level
+workspace ACL. Existing workers and unrelated tunnels are never overwritten.
+
+Private-key search reads only the explicitly selected directory, compares public
+key material, and skips symlinks. Elevation uses the native system prompt and a
+one-operation helper; no system password is collected by the web application.
+Generated deployment keys are unencrypted and protected by OS file permissions.
+Encrypted keys should be loaded in the operating system SSH agent.
+
+Official tool downloads are versioned and checksum-pinned in `src/tool-assets.json`.
+The published rootfs is also checksum-pinned. Changing these pins requires review.

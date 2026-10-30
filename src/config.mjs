@@ -53,10 +53,13 @@ export function validateServer(server) {
   const text=value=> typeof value==='string' && value.length<2048 && !/[\r\n\0]/.test(value);
   if (server.mode==='ssh') {
     if (!text(server.host) || !/^[a-zA-Z0-9_.@-]+$/.test(server.host) || server.host.startsWith('-')) throw new Error('invalid_ssh_host');
+    if(server.port!==undefined&&(!Number.isInteger(server.port)||server.port<1||server.port>65535))throw new Error('invalid_ssh_port');
+    if(server.identityFile!==undefined&&!text(server.identityFile))throw new Error('invalid_ssh_key_path');
   } else {
     if (!/^dsw-[a-zA-Z0-9-]{4,100}$/.test(server.instanceId||'') || !/^[a-z][a-z0-9-]{1,40}$/.test(server.region||'')) throw new Error('invalid_dsw_identity');
     if (![server.proxyClient,server.credentialsFile,server.identityFile].every(text)) throw new Error('invalid_dsw_paths');
     if (!/^[a-zA-Z0-9_-]{1,64}$/.test(server.user||'')) throw new Error('invalid_ssh_user');
   }
+  if(server.knownHostsFile!==undefined&&!text(server.knownHostsFile))throw new Error('invalid_known_hosts_file');
   return server;
 }
