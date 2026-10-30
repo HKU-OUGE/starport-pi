@@ -33,7 +33,7 @@ test("encrypted profiles round-trip on fresh machines without runtime identities
     );
     c.servers.alpha = {
       mode: "dsw",
-      instanceId: "dsw-example",
+      instanceId: "dsw-" + "example1234567890",
       region: "example-region",
       user: "root",
       proxyClient: path.join(source, "proxyclient"),
@@ -149,5 +149,130 @@ test("encrypted profiles round-trip on fresh machines without runtime identities
     assert.deepEqual(load(badTarget).servers, {});
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("repair changes only unused DSW identities and retains credentials and other configuration", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "starport-repair-"));
+  try {
+    const c = load(root),
+      cred = path.join(root, "credential-file");
+    fs.writeFileSync(
+      cred,
+      "accesskeyid = 'example-key'\naccesskeysecret = 'example-secret'\nregionid = 'old-region'\nststoken = ''\n",
+    );
+    c.servers.alpha = {
+      mode: "dsw",
+      instanceId: "dsw-proxy",
+      region: "old-region",
+      user: "root",
+      proxyClient: "proxyclient",
+      credentialsFile: cred,
+      identityFile: "operator-key",
+      initialized: false,
+      budget: { cpus: 2, memoryGiB: 4, gpus: [] },
+    };
+    c.model = "claude-opus-5-5";
+    c.proxy.selected = "unchanged";
+    save(c, root);
+    writePrivate(path.join(root, "secrets.json"), {
+      anthropicApiKey: "keep-this-key",
+    });
+    writePrivate(path.join(root, "cloudflare", "receipt.json"), {
+      tunnel: "keep-this-tunnel",
+    });
+    const profile = {
+      format: "starport-pi-profile",
+      version: 1,
+      network: { subscriptions: [] },
+      servers: [
+        {
+          name: "alpha",
+          mode: "dsw",
+          instanceId: "dsw-" + "example1234567890",
+          region: "new-region",
+          privateKey: "DO NOT IMPORT",
+          credentials: { accesskeysecret: "DO NOT IMPORT" },
+        },
+      ],
+    };
+    const { updateUnverifiedConnections } =
+      await import("../src/profile-transfer.mjs");
+    const done = await updateUnverifiedConnections(root, profile, "");
+    assert.deepEqual(done.updated, ["alpha"]);
+    const after = load(root);
+    assert.equal(after.servers.alpha.instanceId, profile.servers[0].instanceId);
+    assert.equal(after.servers.alpha.region, "new-region");
+    assert.equal(after.servers.alpha.identityFile, "operator-key");
+    assert.equal(after.servers.alpha.initialized, false);
+    assert.equal(after.proxy.selected, "unchanged");
+    assert.equal(after.model, c.model);
+    const credentials = fs.readFileSync(
+      after.servers.alpha.credentialsFile,
+      "utf8",
+    );
+    assert.ok(credentials.includes("example-secret"));
+    assert.ok(credentials.includes("new-region"));
+    assert.ok(!credentials.includes("DO NOT IMPORT"));
+    assert.equal(
+      JSON.parse(fs.readFileSync(path.join(root, "secrets.json")))
+        .anthropicApiKey,
+      "keep-this-key",
+    );
+    assert.equal(
+      JSON.parse(fs.readFileSync(path.join(root, "cloudflare", "receipt.json")))
+        .tunnel,
+      "keep-this-tunnel",
+    );
+    assert.equal(
+      (await updateUnverifiedConnections(root, profile, "")).unchanged,
+      true,
+    );
+    const before = fs.readFileSync(path.join(root, "config.json"), "utf8");
+    for (const protection of [
+      { initialized: true },
+      { installStarted: true },
+      { knownHostsFile: "keep-host-trust" },
+    ]) {
+      const next = structuredClone(after);
+      Object.assign(next.servers.alpha, protection);
+      save(next, root);
+      await assert.rejects(
+        () =>
+          updateUnverifiedConnections(
+            root,
+            {
+              ...profile,
+              servers: [
+                {
+                  ...profile.servers[0],
+                  instanceId: "dsw-" + "different12345678",
+                },
+              ],
+            },
+            "",
+          ),
+        /requires_unused/,
+      );
+      assert.deepEqual(load(root), next);
+    }
+    fs.writeFileSync(path.join(root, "config.json"), before);
+    writePrivate(path.join(root, "panel", "sessions.json"), [
+      { server: "alpha", jobs: [] },
+    ]);
+    await assert.rejects(
+      () =>
+        updateUnverifiedConnections(
+          root,
+          {
+            ...profile,
+            servers: [{ ...profile.servers[0], region: "another-region" }],
+          },
+          "",
+        ),
+      /requires_unused/,
+    );
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
   }
 });

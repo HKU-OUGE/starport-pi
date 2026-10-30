@@ -770,6 +770,30 @@ export default function Setup({ onClose, onChange, guideOnly = false }) {
                 <button className="primary" disabled={disabled}>
                   导入到当前新配置
                 </button>
+                <button
+                  type="button"
+                  disabled={disabled}
+                  onClick={async () => {
+                    const r = await run("config-update-connections", {
+                      bundle: transfer.bundle,
+                      password: transfer.password,
+                    });
+                    if (r)
+                      Transfer({
+                        ...transfer,
+                        password: "",
+                        bundle: null,
+                        preview: null,
+                        name: "",
+                      });
+                  }}
+                >
+                  更新已导入的未初始化 DSW 连接
+                </button>
+                <p>
+                  此更新只修正实例 ID
+                  和区域，保留现有凭证、订阅、模型和远端入口。已初始化或已有会话的连接不会被修改。
+                </p>
               </div>
             )}
           </form>
@@ -903,6 +927,12 @@ export default function Setup({ onClose, onChange, guideOnly = false }) {
             STARPORT_PI_STATE、面板连接埠与远端工作帐户／实例；登录邮箱只加入各自的
             Access 名单。管理入口另需本机访问码。
           </p>
+          <h3>SSH 权限边界</h3>
+          <p>
+            当前连接保存的是操作端管理凭证。Pi 任务通过隔离 worker
+            执行，但持有同一 SSH 私钥的人仍可使用其他 SSH
+            客户端访问该账户允许的文件。向普通使用者提供服务时，需要另设受限账户或服务器强制命令。
+          </p>
           <h3>SSH 密钥</h3>
           <pre>
             {
@@ -942,6 +972,9 @@ export default function Setup({ onClose, onChange, guideOnly = false }) {
                     ? ` · ${(op.detail.bytes / 1048576).toFixed(1)} MiB${op.detail.total ? " / " + (op.detail.total / 1048576).toFixed(1) + " MiB" : ""}`
                     : ""}
                   {op.error ? " · " + op.error : ""}
+                  {op.result?.updated?.length
+                    ? " · 已更新：" + op.result.updated.join("、")
+                    : ""}
                 </small>
               </div>
               <span className={"badge " + op.status}>

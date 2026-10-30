@@ -75,6 +75,13 @@ before importing into a fresh profile. Keep the export outside Git, and do not
 print its password or credentials. Imported remote connections start unverified;
 check current resource availability and ownership before additive installation.
 A copied connection is not proof of protocol or dependency compatibility.
+When collecting an existing DSW alias, parse complete ProxyCommand arguments;
+resolve the exact `%h` token using `ssh -G` HostName. Never extract a substring
+from an executable path. Check the real instance and region with a read-only
+cloud query and a pinned-host SSH probe before labeling the connection verified.
+Use the connection-update action for unused unverified imports, not deletion of
+the whole profile. General SSH administrative credentials are not restricted
+worker credentials; do not distribute them to untrusted users.
 Allocate a fresh Cloudflare hostname after import, keeping the previous console
 intact. Do not copy a tunnel connector token, live PID, host trust, or WSL distro
 identity to another computer. Ask about startup separately after validation.

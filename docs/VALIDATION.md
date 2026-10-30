@@ -71,3 +71,17 @@ module after rebuilding was found and given an explicit reload fallback.
 Local test results: 23 Node tests and 11 Python tests passed. Platform-specific
 WSL bridge tests run only on Linux; Windows and macOS skips are not execution
 acceptance.
+
+## v0.3.1 connection repair
+
+Regression coverage includes ProxyCommand executable names versus complete
+instance arguments and `%h`, conflicting identities, invalid placeholder IDs,
+retained configuration during repair, refusal to change initialized or used
+connections, missing imported scan directories, and sanitized ProxyClient error
+classification. Shape checks do not prove that an instance exists: actual
+exports must also be checked with cloud GetInstance and SSH before delivery.
+
+Local v0.3.1 checks: 25 Node tests and 13 Python tests passed. The browser
+connection-update flow changed a deliberately invalid fixture ID while retaining
+its uninitialized state and existing settings. Deployment-specific validation
+records remain private and are not part of this public repository.

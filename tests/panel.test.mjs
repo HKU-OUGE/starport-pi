@@ -130,7 +130,12 @@ test("HTTP panel rejects unauthenticated and cross-origin writes; streams verifi
     store = new PanelStore(root, { remoteFactory: () => remote });
   let app;
   try {
-    app = await startPanel(root, { port: 0, store, useModelProxy: false, maintenance: false });
+    app = await startPanel(root, {
+      port: 0,
+      store,
+      useModelProxy: false,
+      maintenance: false,
+    });
     const base = "http://127.0.0.1:" + app.port;
     assert.equal((await fetch(base + "/api/bootstrap")).status, 401);
     const sign = await fetch(base + "/api/login", {
@@ -261,12 +266,18 @@ test("SSH command input cannot execute local commands or proxy options", () => {
   ])
     assert.throws(() => parseSshCommand(s));
 });
-test('private known-host paths survive native OpenSSH parsing with spaces',async()=>{
-  const file=path.join(os.tmpdir(),'starport profile','known_hosts');
-  const args=sshArgs('alpha',{mode:'ssh',host:'worker.example.invalid',knownHostsFile:file},os.tmpdir());
-  const output=(await processCall('ssh',['-G',...args],'')).toString();
-  const line=output.split('\n').find(x=>x.startsWith('userknownhostsfile '));
-  assert.ok(line.includes(file.replaceAll('\\','/')),line);
+test("private known-host paths survive native OpenSSH parsing with spaces", async () => {
+  const file = path.join(os.tmpdir(), "starport profile", "known_hosts");
+  const args = sshArgs(
+    "alpha",
+    { mode: "ssh", host: "worker.example.invalid", knownHostsFile: file },
+    os.tmpdir(),
+  );
+  const output = (await processCall("ssh", ["-G", ...args], "")).toString();
+  const line = output
+    .split("\n")
+    .find((x) => x.startsWith("userknownhostsfile "));
+  assert.ok(line.includes(file.replaceAll("\\", "/")), line);
 });
 test("server activation requires a successful isolation probe and confirmed resource release", async () => {
   let status = { status: "completed", exit_code: 0, released: true };
@@ -326,5 +337,51 @@ test("private-key search proves the matching public key and skips links", async 
     );
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("imported DSW scan creates its private directory and reports a safe cloud failure", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "starport-dsw-scan-"));
+  try {
+    const { Setup } = await import("../src/setup.mjs");
+    const { writePrivate } = await import("../src/config.mjs");
+    const c = load(root);
+    c.servers.alpha = {
+      mode: "dsw",
+      instanceId: "dsw-" + "example1234567890",
+      region: "example-region",
+      user: "root",
+      proxyClient: "proxyclient",
+      credentialsFile: "credentials",
+      identityFile: "key",
+      initialized: false,
+    };
+    save(c, root);
+    const setup = new Setup(root, {
+      tool: async () => "proxyclient",
+      execute: async (program, args) => {
+        assert.equal(program, "ssh");
+        assert.ok(args.some((x) => x.includes("host-key-scan")));
+        const directory = path.join(root, "connections", "alpha");
+        assert.ok(fs.existsSync(directory));
+        writePrivate(path.join(directory, "proxy-status.json"), {
+          error: "dsw_instance_not_found_check_id_and_region",
+        });
+        throw new Error("server_connection_failed");
+      },
+    });
+    await setup.dispatch("server-scan", { name: "alpha" });
+    await setup.pending;
+    assert.equal(setup.operations[0].status, "failed");
+    assert.equal(
+      setup.operations[0].error,
+      "dsw_instance_not_found_check_id_and_region",
+    );
+    assert.equal(
+      fs.existsSync(path.join(root, "connections", "alpha", "known_hosts")),
+      false,
+    );
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
   }
 });

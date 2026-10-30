@@ -1,6 +1,6 @@
 {
   "mode": "dsw",
-  "instanceId": "dsw-example",
+  "instanceId": "dsw-<actual-instance-id>",
   "region": "actual-region-id",
   "user": "root",
   "proxyClient": "./private/proxyclient.exe",

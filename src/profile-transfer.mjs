@@ -403,3 +403,74 @@ export async function importProfile(root, value, password) {
     throw e;
   }
 }
+
+export async function updateUnverifiedConnections(root, value, password) {
+  const b = await decodeProfile(value, password),
+    c = load(root);
+  const rows = b.servers.filter((s) => s.mode === "dsw");
+  if (!rows.length) throw new Error("no_dsw_connections_in_profile");
+  const sessionsFile = path.join(root, "panel", "sessions.json");
+  const sessions = fs.existsSync(sessionsFile) ? read(sessionsFile) : [];
+  const operationsFile = path.join(root, "setup-operations.json");
+  if (
+    fs.existsSync(operationsFile) &&
+    read(operationsFile).some(
+      (o) => o.status === "running" && o.kind !== "connection-update",
+    )
+  )
+    throw new Error("setup_operation_running");
+  const changes = [],
+    seen = new Set();
+  for (const row of rows) {
+    const name = id(row.name),
+      old = c.servers[name];
+    if (seen.has(name)) throw new Error("duplicate_server");
+    seen.add(name);
+    if (!old || old.mode !== "dsw") throw new Error("repair_server_not_found");
+    if (old.instanceId === row.instanceId && old.region === row.region)
+      continue;
+    if (
+      old.initialized !== false ||
+      old.installStarted ||
+      old.knownHostsFile ||
+      sessions.some((s) => s.server === name)
+    )
+      throw new Error("repair_requires_unused_unverified_connections");
+    const next = { ...old, instanceId: row.instanceId, region: row.region };
+    validateServer(next);
+    const cred = credentials(secretText(old.credentialsFile));
+    if (
+      !cred.accesskeyid ||
+      !cred.accesskeysecret ||
+      Object.values(cred).some((v) => /[\r\n\x00']/.test(v))
+    )
+      throw new Error("invalid_existing_dsw_credentials");
+    changes.push({ name, next, cred });
+  }
+  if (!changes.length) return { updated: [], unchanged: true };
+  const namespace = privateDir(
+    path.join(
+      root,
+      "imports",
+      "repair-" + crypto.randomBytes(12).toString("hex"),
+    ),
+  );
+  try {
+    for (const { name, next, cred } of changes) {
+      next.credentialsFile = path.join(namespace, name + "-proxyclient-config");
+      writeSecret(
+        next.credentialsFile,
+        `accesskeyid = '${cred.accesskeyid}'\naccesskeysecret = '${cred.accesskeysecret}'\nregionid = '${next.region}'\nststoken = '${cred.ststoken || ""}'\n`,
+      );
+      c.servers[name] = next;
+    }
+    save(c, root);
+    return {
+      updated: changes.map((s) => s.name),
+      requiresHostVerification: true,
+    };
+  } catch (e) {
+    fs.rmSync(namespace, { recursive: true, force: true });
+    throw e;
+  }
+}

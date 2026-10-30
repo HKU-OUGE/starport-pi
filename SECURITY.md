@@ -72,3 +72,14 @@ scrypt-derived key authenticates each export. Import is operator-only, rejects
 existing profiles, rebuilds private paths, and never imports trust or live process
 identities. It does not automatically grant remote worker execution or publish a
 Cloudflare endpoint.
+
+## SSH administrative access
+
+The operator profile currently uses ordinary SSH accounts to install and invoke
+the worker. The client chooses a fixed RPC command, but the SSH credential itself
+is not restricted by the server to that command. A holder of an administrative
+key can use another SSH client to access files allowed by that account. Do not
+distribute administrative exports as restricted-user profiles. Enforcing the
+same boundary for arbitrary SSH clients requires a dedicated account or a
+server-enforced command on a separate key, with forwarding controlled separately.
+Existing administrative keys and running services are not modified by import.

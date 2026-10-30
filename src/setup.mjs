@@ -34,6 +34,7 @@ import {
   importProfile,
   decodeProfile,
   profileSummary,
+  updateUnverifiedConnections,
 } from "./profile-transfer.mjs";
 import { installLocal } from "./install-local.mjs";
 import { closeLocalBridges } from "./local-bridge.mjs";
@@ -117,13 +118,20 @@ export async function verifyWorker(
 export class Setup {
   constructor(
     root,
-    { port, store, install = installRemote, tool = installTool } = {},
+    {
+      port,
+      store,
+      install = installRemote,
+      tool = installTool,
+      execute = processCall,
+    } = {},
   ) {
     this.root = root;
     this.port = port;
     this.store = store;
     this.install = install;
     this.tool = tool;
+    this.runProcess = execute;
     this.foundKeys = new Map();
     this.connector = null;
     this.operationsFile = path.join(root, "setup-operations.json");
@@ -245,6 +253,10 @@ export class Setup {
       );
     if (action === "config-preview")
       return profileSummary(await decodeProfile(input.bundle, input.password));
+    if (action === "config-update-connections")
+      return this.start("connection-update", () =>
+        updateUnverifiedConnections(this.root, input.bundle, input.password),
+      );
     if (action === "config-import")
       return this.start("configuration", async (stage) => {
         stage("importing_configuration");
@@ -467,6 +479,12 @@ export class Setup {
           input.name,
           "host-key-scan",
         );
+        privateDir(path.dirname(scanFile));
+        const proxyReport = path.join(
+          path.dirname(scanFile),
+          "proxy-status.json",
+        );
+        fs.rmSync(proxyReport, { force: true });
         fs.rmSync(scanFile, { force: true });
         const args = sshArgs(
           input.name,
@@ -491,9 +509,26 @@ export class Setup {
         );
         stage("reading_host_key");
         try {
-          await processCall("ssh", [...args, "true"], "", { timeout: 30000 });
+          await this.runProcess("ssh", [...args, "true"], "", {
+            timeout: 30000,
+          });
         } catch {
           /* Authentication is deliberately disabled until the key is confirmed. */
+        }
+        if (
+          !fs.existsSync(scanFile) &&
+          server.mode === "dsw" &&
+          fs.existsSync(proxyReport)
+        ) {
+          const failure = JSON.parse(fs.readFileSync(proxyReport, "utf8"));
+          if (
+            [
+              "dsw_instance_not_found_check_id_and_region",
+              "dsw_token_permission_denied",
+              "dsw_credentials_rejected",
+            ].includes(failure.error)
+          )
+            throw new Error(failure.error);
         }
         if (!fs.existsSync(scanFile))
           throw new Error("ssh_unreachable_check_vpc_or_proxyclient");

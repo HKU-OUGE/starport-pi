@@ -113,7 +113,7 @@ export function validateServer(server) {
       throw new Error("invalid_ssh_key_path");
   } else {
     if (
-      !/^dsw-[a-zA-Z0-9-]{4,100}$/.test(server.instanceId || "") ||
+      !/^dsw-[a-z0-9]{12,64}$/.test(server.instanceId || "") ||
       !/^[a-z][a-z0-9-]{1,40}$/.test(server.region || "")
     )
       throw new Error("invalid_dsw_identity");
