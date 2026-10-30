@@ -17,6 +17,10 @@
   "engines": {
     "node": ">=22.19.0"
   },
+  "overrides": {
+    "@earendil-works/pi-coding-agent": {"undici": "8.12.3"},
+    "openai": {"undici": "$undici"}
+  },
   "dependencies": {
     "@earendil-works/pi-ai": "1.4.0",
     "@earendil-works/pi-coding-agent": "1.4.0",

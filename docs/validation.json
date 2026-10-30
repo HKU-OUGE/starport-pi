@@ -1,0 +1,39 @@
+{
+  "boundaries": {
+    "dataset_readonly": true,
+    "dataset_immutable": true,
+    "host_paths_hidden": true,
+    "operator_environment_absent": true,
+    "direct_network_blocked": true
+  },
+  "file_sha256_roundtrip": true,
+  "tunnel_created": true,
+  "network": {
+    "proxy_https_status": 200
+  },
+  "fail_closed": {
+    "proxy_failure_blocks_egress": true
+  },
+  "quiet_task_survived": true,
+  "cancellation_released": true,
+  "date": "2026-10-30",
+  "profile": {
+    "locale": "zh_TW.UTF-8",
+    "encoding": "UTF-8",
+    "filesystem_encoding": "utf-8",
+    "timezone": "Asia/Taipei",
+    "offset_seconds": 28800,
+    "fonts": {
+      "sans-serif": "Noto Sans CJK TC",
+      "serif": "Noto Serif CJK TC",
+      "monospace": "Noto Sans Mono CJK TC"
+    },
+    "unicode_roundtrip": true,
+    "machine_id_empty": true,
+    "hostname": "workspace",
+    "direct_network_blocked": true,
+    "passed": true
+  },
+  "model_calls": "stubbed; no paid API key used",
+  "gpu_validation": "driver compatibility only; no compute reservation available"
+}

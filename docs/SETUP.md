@@ -4,7 +4,7 @@
 
 Windows 使用 `scripts/install.ps1`；Linux／macOS 使用 `scripts/install.sh`。完成後執行 `node bin/starport-pi.mjs configure`。
 
-訂閱選單支援 Clash／Mihomo YAML，以及 SS、VMess、VLESS、Trojan URI 列表和 Base64 列表；目前接受 TCP、WebSocket、gRPC 傳輸。從 [Mihomo 官方發布](https://github.com/MetaCubeX/mihomo/releases)取得對應系統的執行檔，在選單填入路徑。
+訂閱選單支援 Clash／Mihomo YAML，以及 SS、VMess、VLESS、Trojan URI 列表和 Base64 列表；接受 TCP、WebSocket、gRPC，以及 SS 的內建 obfs／v2ray-plugin 選項。從 [Mihomo 官方發布](https://github.com/MetaCubeX/mihomo/releases)取得對應系統的執行檔，在選單填入路徑。
 
 選擇節點後執行「啟動／套用出口」。使用獨立的 loopback 代理與帶隨機密鑰的管理端口；不接管既有系統代理。更新 HTTPS 訂閱後再次套用。提供者的 routing、DIRECT fallback、腳本和公開監聽設定不會直接匯入。
 
@@ -40,7 +40,7 @@ bash scripts/build-rootfs.sh
 在工作台執行 `/install-server`，選擇 rootfs 並設定 CPU／記憶體預算。安裝器：
 
 - 驗證傳輸 SHA-256，安全解包乾淨 rootfs。
-- 下載固定版本的 gVisor 完整套件，驗證 SHA-512，保留 runsc 和配套 sidecar。
+- 操作端經所選代理下載固定版本的 gVisor 完整套件，驗證 SHA-512，再經 SSH 上傳；伺服器不需要直連下載站。保留 runsc 和配套 sidecar。
 - 新增使用者專屬目錄，記錄 runtime 雜湊；不修改原有 Python 環境、Docker、SSH 或其他服務。
 - 已存在安裝時拒絕覆蓋，避免影響執行中的任務。
 

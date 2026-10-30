@@ -71,7 +71,7 @@ def unpack(archive,destination):
                 with parent_fd(destination,destination_parts[:-1]) as fd:os.symlink(member.linkname,destination_parts[-1],dir_fd=fd)
 
 
-def runtime(source,target,expected=None,version='20261026.0'):
+def runtime(source,target,expected=None,version='20261026.0',archive=None,archive_sha256=None):
     if source:
         if not expected or sha(source)!=expected:raise ValueError('runtime_checksum_required')
         shutil.copyfile(source,target)
@@ -81,6 +81,12 @@ def runtime(source,target,expected=None,version='20261026.0'):
         for file in sidecars.iterdir():
             if file.is_symlink() or not file.is_file():raise ValueError('invalid_runtime_sidecar')
             shutil.copyfile(file,output/file.name);(output/file.name).chmod(0o755)
+    elif archive:
+        if not archive_sha256 or sha(archive)!=archive_sha256:raise ValueError('runtime_archive_checksum')
+        with tempfile.TemporaryDirectory(dir=target.parent) as folder:
+            extracted=pathlib.Path(folder)/'unpacked';unpack(archive,extracted)
+            shutil.move(extracted/'runsc',target)
+            shutil.move(extracted/'gvisor-bin',target.parent/'gvisor-bin')
     else:
         machine=os.uname().machine
         if machine not in ('x86_64','aarch64'):raise ValueError('unsupported_server_architecture')
@@ -113,6 +119,8 @@ def main():
     parser.add_argument('--sha256',required=True)
     parser.add_argument('--runsc',type=pathlib.Path)
     parser.add_argument('--runsc-sha256')
+    parser.add_argument('--runtime-archive',type=pathlib.Path)
+    parser.add_argument('--runtime-sha256')
     parser.add_argument('--cpus',type=int,default=4)
     parser.add_argument('--cpu-indices',help='Optional explicit Linux CPU indices')
     parser.add_argument('--memory-gib',type=int,default=8)
@@ -123,7 +131,7 @@ def main():
     if sha(args.rootfs)!=args.sha256:raise ValueError('rootfs_checksum_failed')
     affinity=sorted(os.sched_getaffinity(0))
     cpus=[int(x) for x in args.cpu_indices.split(',')] if args.cpu_indices else affinity[:args.cpus]
-    if args.memory_gib<2 or len(cpus)!=args.cpus or not set(cpus)<=set(affinity):raise ValueError('invalid_server_budget')
+    if not 1<=args.cpus<=512 or not 2<=args.memory_gib<=4096 or len(cpus)!=args.cpus or len(set(cpus))!=len(cpus) or not set(cpus)<=set(affinity):raise ValueError('invalid_server_budget')
     root=args.root.expanduser().absolute()
     if root.exists():raise ValueError('installation_exists_use_separate_directory')
     root.parent.mkdir(parents=True,exist_ok=True)
@@ -134,7 +142,7 @@ def main():
             # Resolve guest absolute symlinks under the staged root for checks.
             p=stage/'rootfs'/required
             if not p.exists() and not p.is_symlink():raise ValueError('rootfs_incomplete')
-        binaries=runtime(args.runsc,stage/'runsc',args.runsc_sha256)
+        binaries=runtime(args.runsc,stage/'runsc',args.runsc_sha256,archive=args.runtime_archive,archive_sha256=args.runtime_sha256)
         for name in ['worker.py','configure_gpu.py']:
             shutil.copyfile(pathlib.Path(__file__).with_name(name),stage/name)
         shutil.copyfile(stage/'rootfs/opt/starport/region.json',stage/'region.json')

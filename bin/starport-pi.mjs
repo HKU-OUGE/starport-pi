@@ -8,7 +8,10 @@ import {requireModelProxy} from '../src/network.mjs';
 import {makeSession} from '../src/session.mjs';
 
 async function main() {
-  const root=stateRoot();const action=process.argv[2];let config=load(root);
+  const action=process.argv[2];
+  if(action==='--version'){console.log('Starport Pi 0.1.0');return;}
+  if(action==='--help'){console.log('starport-pi [configure | auth | verify-server | doctor | probe | --print MESSAGE]\nInteractive: /starport /network /servers /workspace /tunnel /upload /download /help');return;}
+  const root=stateRoot();let config=load(root);
   if(action==='configure'){await configure(root,process.argv[3]||'menu');return;}
   if(action==='auth') {
     const key=await secretPrompt('Anthropic API Key（隱藏輸入）: ');
@@ -35,12 +38,14 @@ async function main() {
       session?.dispose();dispatcher=requireModelProxy(config);
       const result=await makeSession(config,root,remote);session=result.session;route=current;
       session.subscribe(event=>{
-        if(event.type==='message_update'&&event.assistantMessageEvent?.type==='text_delta')process.stdout.write(event.assistantMessageEvent.delta);
+        if(event.type==='message_update'&&event.assistantMessageEvent?.type==='text_delta')process.stdout.write(event.assistantMessageEvent.delta.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]/g,''));
         if(event.type==='tool_execution_start')console.log(`\n▸ ${event.toolName}`);
         if(event.type==='tool_execution_end')console.log(event.isError?'  失敗':'  完成');
       });
     }
-    const started=Date.now();await session.prompt(message);console.log(`\n· ${((Date.now()-started)/1000).toFixed(1)}s`);
+    const started=Date.now();await session.prompt(message);
+    if(session.agent.state.messages.at(-1)?.stopReason==='error')throw new Error('model_request_failed_check_api_key_or_proxy');
+    console.log(`\n· ${((Date.now()-started)/1000).toFixed(1)}s`);
   }
   try{
     if(action==='--print'){await prompt(process.argv.slice(3).join(' '));return;}

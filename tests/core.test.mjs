@@ -41,6 +41,10 @@ test('common URI and base64 subscriptions',()=>{
   assert.equal(parseSubscription(uri).nodes[0].password,'example-password');
   assert.equal(parseSubscription(Buffer.from(uri).toString('base64')).nodes[0].type,'trojan');
   assert.equal(parseSubscription('ss://'+Buffer.from('aes-256-gcm:example-password').toString('base64')+'@node.example.invalid:443#Example').nodes[0].cipher,'aes-256-gcm');
+  const ss='ss://'+Buffer.from('aes-256-gcm:example-password').toString('base64')+'@node.example.invalid:443?plugin='+encodeURIComponent('obfs-local;obfs=tls;obfs-host=www.example.com');
+  const node=parseSubscription(ss).nodes[0];assert.equal(node.plugin,'obfs');assert.equal(node['plugin-opts'].mode,'tls');
+  assert.equal(normalizeNode(node)['plugin-opts'].host,'www.example.com');
+  assert.throws(()=>normalizeNode({...node,plugin:'external-command'}),/unsupported_node_plugin/);
 });
 test('private endpoint ranges rejected',()=>{
   for(const ip of ['127.0.0.1','10.0.0.1','169.254.169.254','172.16.0.1','192.168.1.1','::1','100.64.0.1'])assert.equal(publicIPv4(ip),false);

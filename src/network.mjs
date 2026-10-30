@@ -9,7 +9,7 @@ import {Agent,Dispatcher,ProxyAgent,setGlobalDispatcher} from 'undici';
 import {privateDir,writePrivate,save,id} from './config.mjs';
 
 const LIMIT=4*1024*1024;
-const FIELDS=new Set(['name','type','server','port','cipher','password','uuid','alterId','tls','servername','sni','alpn','client-fingerprint','network','flow','reality-opts','ws-opts','grpc-opts']);
+const FIELDS=new Set(['name','type','server','port','cipher','password','uuid','alterId','tls','servername','sni','alpn','client-fingerprint','network','flow','reality-opts','ws-opts','grpc-opts','plugin','plugin-opts']);
 const decode=value=>Buffer.from(value,'base64url').toString('utf8');
 function uri(line) {
   if(line.startsWith('vmess://')) {
@@ -25,6 +25,11 @@ function uri(line) {
     const auth=u.password?`${decodeURIComponent(u.username)}:${decodeURIComponent(u.password)}`:decode(decodeURIComponent(u.username));
     const at=auth.indexOf(':');if(at<1)throw new Error('subscription_invalid');
     Object.assign(n,{cipher:auth.slice(0,at),password:auth.slice(at+1)});
+    if(q.get('plugin')){
+      const [plugin,...options]=q.get('plugin').split(';');n.plugin=plugin==='obfs-local'?'obfs':plugin;
+      n['plugin-opts']={};
+      for(const option of options){const [key,...values]=option.split('=');n['plugin-opts'][key==='obfs'?'mode':key==='obfs-host'?'host':key]=values.length?values.join('='):true;}
+    }
   } else if(type==='vless'||type==='trojan') {
     n[type==='vless'?'uuid':'password']=decodeURIComponent(u.username);
     n.tls=type==='trojan'||['tls','reality'].includes(q.get('security'));
@@ -41,7 +46,13 @@ function uri(line) {
 export function normalizeNode(value) {
   if(!value||typeof value!=='object'||!['ss','vmess','vless','trojan'].includes(value.type))throw new Error('unsupported_subscription_protocol');
   if(value['skip-cert-verify'])throw new Error('insecure_tls_node_rejected');
-  if(value.plugin)throw new Error('unsupported_node_plugin');
+  if(value.plugin){
+    if(value.type!=='ss'||!['obfs','v2ray-plugin'].includes(value.plugin))throw new Error('unsupported_node_plugin');
+    const opts=value['plugin-opts'];
+    if(!opts||typeof opts!=='object'||Array.isArray(opts)||Object.keys(opts).some(k=>!['mode','host','path','tls','mux','headers'].includes(k)))throw new Error('unsupported_plugin_options');
+    if(value.plugin==='obfs'&&!['http','tls'].includes(opts.mode))throw new Error('unsupported_plugin_mode');
+    if(value.plugin==='v2ray-plugin'&&(opts.mode||'websocket')!=='websocket')throw new Error('unsupported_plugin_mode');
+  }
   const n=Object.fromEntries(Object.entries(value).filter(([k])=>FIELDS.has(k)));
   if(typeof n.server!=='string'||!/^[-a-zA-Z0-9.:[\]]{1,253}$/.test(n.server)||!Number.isInteger(Number(n.port))||Number(n.port)<1||Number(n.port)>65535)throw new Error('subscription_invalid');
   n.port=Number(n.port);n.name=String(n.name||n.type).slice(0,160);n.udp=false;
