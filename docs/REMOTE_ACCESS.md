@@ -1,58 +1,58 @@
-# 網頁工作台與遠端存取
+# 网页工作台与远端访问
 
-Windows 原生執行；WSL2 不需要。安裝完成後開啟 `http://127.0.0.1:18900/`，使用啟動視窗中的本機存取碼登入。
+Windows 原生执行；WSL2 不需要。安装完成后开启 `http://127.0.0.1:18900/`，使用启动窗口中的本机访问码登入。
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\install.ps1
 ```
 
-安裝器檢查 Node.js、Python、OpenSSH，建置網頁並啟動面板。若 Windows 缺少 OpenSSH，會使用系統 UAC 視窗安裝；密碼不會寫入設定。只安裝、不開啟面板：加上 `-LaunchPanel:$false`。後續啟動：
+安装器检查 Node.js、Python、OpenSSH，建置网页并启动面板。若 Windows 缺少 OpenSSH，会使用系统 UAC 窗口安装；密码不会写入设置。只安装、不开启面板：加上 `-LaunchPanel:$false`。后续启动：
 
 ```powershell
 .\starport-pi.cmd panel
 ```
 
-Linux／macOS：`bash scripts/install.sh`，然後 `npm run panel`。
+Linux／macOS：`bash scripts/install.sh`，然后 `npm run panel`。
 
-## 部署向導
+## 部署向导
 
-點右上角「部署與管理」，依序完成：
+点右上角「部署与管理」，依序完成：
 
-1. **訂閱與出口**：填 HTTPS 訂閱，或貼上 YAML／SS／VMess／VLESS／Trojan 清單。匯入後選節點，按「套用並啟動」。工具自動下載固定版本 Mihomo 並驗證 SHA-256，不修改系統代理。更新訂閱後需重新套用選定節點。
-2. **伺服器**：填 SSH 指令與私鑰，或使用 DSW ProxyClient 表單。設定本服務的 CPU、記憶體與專用 GPU 編號，新增後測試連線。第一次核對主機指紋，再按「初始化環境」。
-3. **模型**：填自己的 Anthropic API Key，選預設模型。
-4. **遠端入口**：填 Cloudflare Token、託管網域、前綴及允許登入的完整信箱。先檢查並分配網址，再套用 Tunnel + Access。
+1. **订阅与出口**：填 HTTPS 订阅，或贴上 YAML／SS／VMess／VLESS／Trojan 清单。导入后选节点，按「套用并启动」。工具自动下载固定版本 Mihomo 并验证 SHA-256，不修改系统代理。更新订阅后需重新套用选定节点。
+2. **服务器**：填 SSH 指令与私钥，或使用 DSW ProxyClient 表单。设置本服务的 CPU、内存与专用 GPU 编号，新增后测试连线。第一次核对主机指纹，再按「初始化环境」。
+3. **模型**：填自己的 Anthropic API Key，选默认模型。
+4. **远端入口**：填 Cloudflare Token、托管网域、前缀及允许登入的完整信箱。先检查并分配网址，再套用 Tunnel + Access。
 
-下載工具、上傳執行環境及驗證會顯示進度。失敗保留原因，未通過初始化的伺服器不出現在新會話選單中。
+下载工具、上传执行环境及验证会显示进度。失败保留原因，未通过初始化的服务器不出现在新会话选单中。
 
 ### SSH／阿里 DSW
 
-直連欄位接受：
+直连栏位接受：
 
 ```text
 ssh -p 22 worker@host
 ssh -i path/to/key -p 2222 worker@host
 ```
 
-`-i` 的原路徑不會直接讀取；請另選私鑰檔、貼上私鑰，或使用「SSH 金鑰」頁的匹配結果。指令不接受尾端 shell 命令、任意 `-o`、ProxyCommand 或轉發旗標。
+`-i` 的原路径不会直接读取；请另选私钥档、贴上私钥，或使用「SSH 密钥」页的匹配结果。指令不接受尾端 shell 命令、任意 `-o`、ProxyCommand 或转发旗标。
 
-VPC 位址需要目前電腦已有 VPC／VPN 路徑；私鑰本身不會建立這條路徑。沒有直連路徑時選 **DSW ProxyClient**：填實例 ID、實際區域、SSH 私鑰、AccessKey ID／Secret，使用 STS 時另填 Token。ProxyClient 由工具自動下載並校驗。DSW 必須已啟用 SSH 並裝入對應公鑰；ProxyClient 的 RAM 身分需要 `paidsw:GetToken`。[官方連線說明](https://help.aliyun.com/zh/pai/connect-to-a-dsw-instance-over-ssh)。
+VPC 位址需要目前电脑已有 VPC／VPN 路径；私钥本身不会建立这条路径。没有直连路径时选 **DSW ProxyClient**：填实例 ID、实际区域、SSH 私钥、AccessKey ID／Secret，使用 STS 时另填 Token。ProxyClient 由工具自动下载并校验。DSW 必须已启用 SSH 并装入对应公钥；ProxyClient 的 RAM 身分需要 `paidsw:GetToken`。[官方连线说明](https://help.aliyun.com/zh/pai/connect-to-a-dsw-instance-over-ssh)。
 
-初始化會新增獨立的 gVisor 執行環境，建立反向出口通道，執行區域與身份隔離自測並確認測試資源釋放。成功後才啟用伺服器。現有 worker 不會被直接覆寫；中斷的本次安裝可重新驗證。只分配已保留給本服務的資源。GPU 初始化完成表示已配置設備，首次實際 GPU 計算仍需小任務驗收。
+初始化会新增独立的 gVisor 执行环境，建立反向出口通道，执行区域与身份隔离自测并确认测试资源释放。成功后才启用服务器。现有 worker 不会被直接覆写；中断的本次安装可重新验证。只分配已保留给本服务的资源。GPU 初始化完成表示已配置设备，首次实际 GPU 计算仍需小任务验收。
 
-目前發布的 rootfs 是 Linux x86_64。Windows／macOS 是工作台，遠端工作節點仍使用 Linux。基礎環境包含 Python／Git／Bash，不包含完整深度學習套件。
+目前发布的 rootfs 是 Linux x86_64。Windows／macOS 是工作台，远端工作节点仍使用 Linux。基础环境包含 Python／Git／Bash，不包含完整深度学习套件。
 
-## SSH 金鑰
+## SSH 密钥
 
-在 Windows PowerShell、Linux 或 macOS 終端執行：
+在 Windows PowerShell、Linux 或 macOS 终端执行：
 
 ```text
 ssh-keygen -t ed25519 -C "starport"
 ```
 
-按提示選擇路徑與密語。預設公鑰是 `.ssh/id_ed25519.pub`，私鑰是同目錄的 `id_ed25519`。**只把公鑰放到伺服器的 `authorized_keys`。**
+按提示选择路径与密语。默认公钥是 `.ssh/id_ed25519.pub`，私钥是同目录的 `id_ed25519`。**只把公钥放到服务器的 `authorized_keys`。**
 
-Windows 查看公鑰：
+Windows 查看公钥：
 
 ```powershell
 Get-Content "$env:USERPROFILE\.ssh\id_ed25519.pub"
@@ -60,44 +60,44 @@ ssh-keygen -lf "$env:USERPROFILE\.ssh\id_ed25519.pub"
 ssh-add "$env:USERPROFILE\.ssh\id_ed25519"
 ```
 
-若 ssh-agent 尚未啟動，可在系統服務設定啟用 OpenSSH Authentication Agent，或用管理員 PowerShell 執行 `Set-Service ssh-agent -StartupType Automatic` 和 `Start-Service ssh-agent`。私鑰密語由 `ssh-add` 在本機讀取。
+若 ssh-agent 尚未启动，可在系统服务设置启用 OpenSSH Authentication Agent，或用管理员 PowerShell 执行 `Set-Service ssh-agent -StartupType Automatic` 和 `Start-Service ssh-agent`。私钥密语由 `ssh-add` 在本机读取。
 
-從**已有私鑰**取回公鑰：
+从**已有私钥**取回公钥：
 
 ```text
 ssh-keygen -y -f path/to/private_key
 ```
 
-不能從公鑰還原遺失的私鑰。面板的「查找匹配私鑰」會讀取指定目錄的候選私鑰，提取公鑰後比對；不只信任同名 `.pub`。預設僅搜尋目前使用者 `.ssh` 的第一層，最多 200 個項目，不跟隨符號連結。
+不能从公钥还原遗失的私钥。面板的「查找匹配私钥」会读取指定目录的候选私钥，提取公钥后比对；不只信任同名 `.pub`。默认仅搜寻目前使用者 `.ssh` 的第一层，最多 200 个项目，不跟随符号连结。
 
-受保護目錄可使用「系統授權後查找指定目錄」：Windows UAC、macOS 管理員視窗、Linux Polkit。須先填完整公鑰與確切目錄，成功後僅複製匹配的私鑰到本設定檔的私有目錄。系統密碼不經過網頁，也不儲存。加密金鑰會標記為待解鎖，不把未驗證的 sidecar 當作匹配成功。面板另外提供無密語的部署專用金鑰生成；需要密語時使用上面的指令。
+受保护目录可使用「系统授权后查找指定目录」：Windows UAC、macOS 管理员窗口、Linux Polkit。须先填完整公钥与确切目录，成功后仅复制匹配的私钥到本设置档的私有目录。系统密码不经过网页，也不储存。加密密钥会标记为待解锁，不把未验证的 sidecar 当作匹配成功。面板另外提供无密语的部署专用密钥生成；需要密语时使用上面的指令。
 
-## Cloudflare Token 與登入名單
+## Cloudflare Token 与登入名单
 
-Token 權限限定在目標帳戶和網域：
+Token 权限限定在目标帐户和网域：
 
-| 範圍 | 權限 |
+| 范围 | 权限 |
 | --- | --- |
 | Account | Cloudflare Tunnel Edit |
 | Account | Access: Apps and Policies Edit |
 | Account | Access: Organizations, Identity Providers, and Groups Read |
 | Zone | Zone Read、DNS Edit |
 
-Zero Trust 帳戶需已設定登入方式，例如電子郵件一次性 PIN。工具不更改整個帳戶的登入方法。輸入的是 Cloudflare API Token，不是主帳號密碼或 Global API Key。
+Zero Trust 帐户需已设置登入方式，例如电子邮件一次性 PIN。工具不更改整个帐户的登入方法。输入的是 Cloudflare API Token，不是主帐号密码或 Global API Key。
 
-每次建立 `console-<隨機後綴>.example.com`，也可填另一個前綴。工具先查 DNS／Access 是否占用，先建可重用的精確信箱允許政策與獨立應用，再驗證來源站已拒絕匿名存取，最後才發布 DNS。連接器使用私有 token 檔案，不把 token 放在程序參數裡。
+每次建立 `console-<随机后缀>.example.com`，也可填另一个前缀。工具先查 DNS／Access 是否占用，先建可重用的精确信箱允许政策与独立应用，再验证来源站已拒绝匿名访问，最后才发布 DNS。连接器使用私有 token 文件，不把 token 放在程序参数里。
 
-| 面板 | 允許信箱 |
+| 面板 | 允许信箱 |
 | --- | --- |
 | 你的面板 | 你的信箱 |
-| 成員 A 的面板 | 成員 A；如需管理可明確加入你的信箱 |
-| 成員 B 的面板 | 成員 B；如需管理可明確加入你的信箱 |
+| 成员 A 的面板 | 成员 A；如需管理可明确加入你的信箱 |
+| 成员 B 的面板 | 成员 B；如需管理可明确加入你的信箱 |
 
-Access 登入權不等於 Cloudflare 管理權。來源站驗證 JWT 簽名、issuer、audience、期限及完整信箱；只偽造 email header 不會通過。遠端「部署與管理」另需本機存取碼。此面板內允許的使用者共享此面板資料；不同人的資料隔離應使用不同 OS 帳戶／設定檔及獨立遠端 worker 帳戶或實例，不能只換網址。
+Access 登入权不等于 Cloudflare 管理权。来源站验证 JWT 签名、issuer、audience、期限及完整信箱；只伪造 email header 不会通过。远端「部署与管理」另需本机访问码。此面板内允许的使用者共享此面板资料；不同人的资料隔离应使用不同 OS 帐户／设置档及独立远端 worker 帐户或实例，不能只换网址。
 
 ### Agent／CLI 配置
 
-將 `examples/cloudflare.example.json` 複製到私有設定目錄，填入網域與信箱，Token 放在同目錄 `api-token`。POSIX 檔案權限使用 `chmod 600 api-token`。在同一 `STARPORT_PI_STATE` 下啟動面板後執行：
+将 `examples/cloudflare.example.json` 复制到私有设置目录，填入网域与信箱，Token 放在同目录 `api-token`。POSIX 文件权限使用 `chmod 600 api-token`。在同一 `STARPORT_PI_STATE` 下启动面板后执行：
 
 ```text
 node bin/starport-cloudflare.mjs plan path/to/private-enrollment.json
@@ -105,43 +105,43 @@ node bin/starport-cloudflare.mjs apply path/to/private-enrollment.json
 node bin/starport-cloudflare.mjs status path/to/private-enrollment.json
 ```
 
-面板會啟動並維護自己的 cloudflared。單獨連接器也可用 `node bin/starport-cloudflare.mjs start`，需要 PATH 中有 cloudflared 2025.4.0+。不要同時啟動重複連接器。
+面板会启动并维护自己的 cloudflared。单独连接器也可用 `node bin/starport-cloudflare.mjs start`，需要 PATH 中有 cloudflared 2025.4.0+。不要同时启动重复连接器。
 
-中斷後 `status` 按本次唯一名稱核對資源，`apply` 接續已完成階段。創建結果不明且無法核對時停止，不盲目重試。`rollback` 只刪除此設定檔記錄且內容仍匹配的資源，先刪 DNS，來源站仍保持 Access 保護；不更改其他控制台。
+中断后 `status` 按本次唯一名称核对资源，`apply` 接续已完成阶段。创建结果不明且无法核对时停止，不盲目重试。`rollback` 只删除此设置档记录且内容仍匹配的资源，先删 DNS，来源站仍保持 Access 保护；不更改其他控制台。
 
-## 會話、任務、日誌和檔案
+## 会话、任务、日志和文件
 
-會話持續在背景執行，切換頁面不停止任務。思考／工具狀態與已用時間會更新；訊息使用序號增量同步，已有內容保留。Markdown 與命令卡片可直接閱讀。模型產生的命令只走遠端 worker。
+会话持续在背景执行，切换页面不停止任务。思考／工具状态与已用时间会更新；讯息使用序号增量同步，已有内容保留。Markdown 与命令卡片可直接阅读。模型产生的命令只走远端 worker。
 
-「停止回覆」停止模型生成；「取消此任務」只取消指定計算。任務頁提供增量日誌與產物下載，執行中的任務也能讀取 `/output`。檔案頁只讀寫該會話工作區。上傳使用 1 MiB 分塊、整體與分塊 SHA-256，同一瀏覽器分頁重選相同檔案可以接續；檔案內容不保留於瀏覽器儲存。
+「停止回复」停止模型生成；「取消此任务」只取消指定计算。任务页提供增量日志与产物下载，执行中的任务也能读取 `/output`。文件页只读写该会话工作区。上传使用 1 MiB 分块、整体与分块 SHA-256，同一浏览器分页重选相同文件可以接续；文件内容不保留于浏览器储存。
 
-附加的檔案放入遠端工作區，訊息加入其路徑；本版不把圖片轉成模型視覺內容。網頁不自動載入訊息中的第三方圖片，避免外部追蹤請求。
+附加的文件放入远端工作区，讯息加入其路径；本版不把图片转成模型视觉内容。网页不自动载入讯息中的第三方图片，避免外部追踪请求。
 
-## 登入後自動啟動
+## 登入后自动启动
 
-Windows 提供目前使用者的登入啟動工作，不需要儲存系統密碼：
+Windows 提供目前使用者的登入启动工作，不需要储存系统密码：
 
-安裝器預設不註冊。使用安裝 Skill 時，Agent 會先詢問；只有明確同意才執行下列註冊命令。
+安装器默认不注册。使用安装 Skill 时，Agent 会先询问；只有明确同意才执行下列注册命令。
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\register-panel.ps1
-# 移除本設定檔的啟動工作
+# 移除本设置档的启动工作
 powershell -ExecutionPolicy Bypass -File .\scripts\register-panel.ps1 -Remove
 ```
 
-這是在使用者登入後啟動，並非登入前的 Windows 系統服務。面板重新啟動後會恢復本設定檔的 Mihomo、已驗證伺服器的出口通道及 Cloudflare 連接器。其他設定檔和其他應用的服務不受影響。
+这是在使用者登入后启动，并非登入前的 Windows 系统服务。面板重新启动后会恢复本设置档的 Mihomo、已验证服务器的出口通道及 Cloudflare 连接器。其他设置档和其他应用的服务不受影响。
 
-代理故障不回退直連；重新連接不會取消訓練。Token 過期、SSH 金鑰更改或 VPC 路徑不可達，仍需在管理頁修正對應設定。
+代理故障不回退直连；重新连接不会取消训练。Token 过期、SSH 密钥更改或 VPC 路径不可达，仍需在管理页修正对应设置。
 
-官方依據：[Tunnel API](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/get-started/create-remote-tunnel-api/)、[Access 政策](https://developers.cloudflare.com/cloudflare-one/access-controls/policies/)、[JWT 驗證](https://developers.cloudflare.com/cloudflare-one/access-controls/applications/http-apps/authorization-cookie/validating-json/)。
+官方依据：[Tunnel API](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/get-started/create-remote-tunnel-api/)、[Access 政策](https://developers.cloudflare.com/cloudflare-one/access-controls/policies/)、[JWT 验证](https://developers.cloudflare.com/cloudflare-one/access-controls/applications/http-apps/authorization-cookie/validating-json/)。
 
-## 停用與卸載
+## 停用与卸载
 
 ```powershell
-# 只顯示本設定檔的處理計畫
+# 只显示本设置档的处理计划
 powershell -ExecutionPolicy Bypass -File .\scripts\uninstall.ps1
-# 停用登入啟動，停止確認屬於本設定檔的本機程序
+# 停用登入启动，停止确认属于本设置档的本机程序
 powershell -ExecutionPolicy Bypass -File .\scripts\uninstall.ps1 -Apply
 ```
 
-預設保留倉庫、設定、憑證、會話、Cloudflare 資源與遠端 worker。停用本機代理會中斷依賴它的任務外網連線；不會替你取消遠端訓練。刪除資料或移除雲端資源須另行指定，流程見[卸載 Skill](../skills/starport-uninstall/SKILL.md)。
+默认保留仓库、设置、凭证、会话、Cloudflare 资源与远端 worker。停用本机代理会中断依赖它的任务外网连线；不会替你取消远端训练。删除资料或移除云端资源须另行指定，流程见[卸载 Skill](../skills/starport-uninstall/SKILL.md)。

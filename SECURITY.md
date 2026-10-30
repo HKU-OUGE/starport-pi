@@ -1,37 +1,37 @@
-# 隔離邊界
+# 隔离边界
 
-Starport Pi 把操作端、控制通道、模型工具與執行環境分開。信任操作人員、Pi／Node.js 套件、SSH、gVisor 和伺服器管理員；把模型生成的命令及專案內容視為不可信。
+Starport Pi 把操作端、控制通道、模型工具与执行环境分开。信任操作人员、Pi／Node.js 套件、SSH、gVisor 和服务器管理员；把模型生成的命令及项目内容视为不可信。
 
-| 邊界 | 實作 |
+| 边界 | 实作 |
 | --- | --- |
-| 本機命令 | 不向模型註冊本機 Bash、檔案系統、設定或安裝工具；不自動載入專案 extension、MCP、skill、AGENTS 或本機 context |
-| SSH／雲憑證 | 留在操作端；固定 RPC 命令，無 Agent forwarding，嚴格 host-key 驗證，連線錯誤不回傳管理資訊 |
-| 宿主檔案 | 乾淨唯讀 rootfs；只掛當前 workspace、當前 output、明確選定的只讀資料及單一出口 socket |
-| 程序與網路 | gVisor 的獨立 PID／IPC／UTS／network 視圖，`--network=none`，無 capabilities，no-new-privileges |
-| 外網 | guest loopback HTTP → 單一 Unix socket → SSH 反向轉發 → 操作端 Mihomo → 選定節點；沒有 DIRECT fallback |
-| API | 只能透過 loopback 代理連接 Anthropic HTTPS API；代理失效即失敗 |
-| 區域設定 | 台北時區、繁體 locale、UTF-8、TC 字型；清空 machine-id 和 boot-id，固定 hostname |
-| 檔案操作 | descriptor-relative 路徑、拒絕 traversal／symlink／特殊檔案，分塊及整檔雜湊 |
+| 本机命令 | 不向模型注册本机 Bash、文件系统、设置或安装工具；不自动载入项目 extension、MCP、skill、AGENTS 或本机 context |
+| SSH／云凭证 | 留在操作端；固定 RPC 命令，无 Agent forwarding，严格 host-key 验证，连线错误不回传管理资讯 |
+| 宿主文件 | 干净唯读 rootfs；只挂当前 workspace、当前 output、明确选定的只读资料及单一出口 socket |
+| 程序与网路 | gVisor 的独立 PID／IPC／UTS／network 视图，`--network=none`，无 capabilities，no-new-privileges |
+| 外网 | guest loopback HTTP → 单一 Unix socket → SSH 反向转发 → 操作端 Mihomo → 选定节点；没有 DIRECT fallback |
+| API | 只能透过 loopback 代理连接 Anthropic HTTPS API；代理失效即失败 |
+| 区域设置 | 台北时区、繁体 locale、UTF-8、TC 字型；清空 machine-id 和 boot-id，固定 hostname |
+| 文件操作 | descriptor-relative 路径、拒绝 traversal／symlink／特殊文件，分块及整档杂凑 |
 
-rootless 單 UID 映射使用 **guest UID 0** 讓持久化 bind 目錄可寫；它不具有宿主 root 檔案系統或 Linux capabilities。任務不能掛入新的宿主目錄、讀取控制服務設定或進入另一個任務。
+rootless 单 UID 映射使用 **guest UID 0** 让持久化 bind 目录可写；它不具有宿主 root 文件系统或 Linux capabilities。任务不能挂入新的宿主目录、读取控制服务设置或进入另一个任务。
 
-控制通道不經模型訂閱代理，這是操作端連接阿里 API／SSH 所需的管理流量。任務無法取得這些連線憑證、管理主機地址或切換出口。訂閱下載和執行檔安裝同樣是人工操作，不屬於模型工具。
+控制通道不经模型订阅代理，这是操作端连接阿里 API／SSH 所需的管理流量。任务无法取得这些连线凭证、管理主机地址或切换出口。订阅下载和执行档安装同样是人工操作，不属于模型工具。
 
-## 資源與相容性
+## 资源与相容性
 
-CPU 使用互不重疊的 affinity 預留，記憶體使用服務預算、MemAvailable 檢查及執行時 RSS 監測。外層 DSW 的硬限制仍有效；RSS 輪詢不是 cgroup 硬記憶體／程序數／磁碟配額，不適合把同一服務直接開放給互不信任的多租戶。部署到專用實例，或由上層提供 cgroup 與磁碟 quota。
+CPU 使用互不重叠的 affinity 预留，内存使用服务预算、MemAvailable 检查及执行时 RSS 监测。外层 DSW 的硬限制仍有效；RSS 轮询不是 cgroup 硬内存／程序数／磁碟配额，不适合把同一服务直接开放给互不信任的多租户。部署到专用实例，或由上层提供 cgroup 与磁碟 quota。
 
-GPU 使用 gVisor nvproxy，限定裝置和驅動庫，核對精確驅動版本。GPU 型號、驅動資訊和 CUDA 可讀的 GPU UUID 可能對程式可見；此版不承諾隱藏 GPU UUID。啟用前需人工保留 GPU，當下顯存閒置不代表其他排程器沒有預留。
+GPU 使用 gVisor nvproxy，限定装置和驱动库，核对精确驱动版本。GPU 型号、驱动资讯和 CUDA 可读的 GPU UUID 可能对程式可见；此版不承诺隐藏 GPU UUID。启用前需人工保留 GPU，当下显存闲置不代表其他排程器没有预留。
 
-SSH 連線帳號是可信管理帳號。多名不互信的使用者應使用不同 worker／實例和金鑰；資料 ID 不是跨使用者授權系統。不要讓模型載入操作端 extension，或給它另一個能在操作端執行命令的工具。
+SSH 连线帐号是可信管理帐号。多名不互信的使用者应使用不同 worker／实例和密钥；资料 ID 不是跨使用者授权系统。不要让模型载入操作端 extension，或给它另一个能在操作端执行命令的工具。
 
-地域設定不會變更實體位置、網路地理位置、帳號所屬地區或供應商的使用資格。這是工作環境一致性與資料隔離工具，並不提供帳號風險保證。
+地域设置不会变更实体位置、网路地理位置、帐号所属地区或供应商的使用资格。这是工作环境一致性与资料隔离工具，并不提供帐号风险保证。
 
-## 公開版本
+## 公开版本
 
-`python scripts/audit_source.py` 掃描候選檔案中的真實路徑、AccessKey、私鑰、個人郵件、執行期目錄和大型產物。設定及訂閱位於作業系統使用者資料目錄，Windows 使用 ACL、POSIX 使用 0700／0600。不要將操作端私有 state 目錄加入 Git。
+`python scripts/audit_source.py` 扫描候选文件中的真实路径、AccessKey、私钥、个人邮件、执行期目录和大型产物。设置及订阅位于作业系统使用者资料目录，Windows 使用 ACL、POSIX 使用 0700／0600。不要将操作端私有 state 目录加入 Git。
 
-上游參考：[Pi](https://github.com/earendil-works/pi)、[gVisor 安裝](https://gvisor.dev/docs/user_guide/install/)、[rootless](https://gvisor.dev/docs/user_guide/rootless/)、[GPU](https://gvisor.dev/docs/user_guide/gpu/)、[Mihomo API](https://wiki.metacubex.one/en/api/)。
+上游参考：[Pi](https://github.com/earendil-works/pi)、[gVisor 安装](https://gvisor.dev/docs/user_guide/install/)、[rootless](https://gvisor.dev/docs/user_guide/rootless/)、[GPU](https://gvisor.dev/docs/user_guide/gpu/)、[Mihomo API](https://wiki.metacubex.one/en/api/)。
 
 ## Web deployment control plane
 
@@ -52,3 +52,23 @@ Encrypted keys should be loaded in the operating system SSH agent.
 
 Official tool downloads are versioned and checksum-pinned in `src/tool-assets.json`.
 The published rootfs is also checksum-pinned. Changing these pins requires review.
+
+## Local Windows execution
+
+Local project commands use a dedicated receipt-owned WSL2 distribution plus the
+same gVisor worker. Windows automount and process interop are disabled before
+first boot. No Windows path is bound into the guest. The fixed RPC and bounded
+stdio proxy bridge are operator capabilities; model tools cannot change their
+commands, select arbitrary distributions, or select a proxy destination. Project
+files remain in the dedicated virtual disk and can be transferred explicitly.
+
+WSL2 and gVisor compatibility must pass on the target machine. The client never
+falls back to a normal local shell. The fixed locale reduces incidental host
+metadata exposure but is not an anonymity guarantee; shared-kernel resource
+limits and generic hardware properties retain the limitations described above.
+
+Encrypted configuration exports contain deployment secrets. AES-256-GCM with a
+scrypt-derived key authenticates each export. Import is operator-only, rejects
+existing profiles, rebuilds private paths, and never imports trust or live process
+identities. It does not automatically grant remote worker execution or publish a
+Cloudflare endpoint.

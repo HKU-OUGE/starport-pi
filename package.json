@@ -1,8 +1,8 @@
 {
   "name": "starport-pi",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
-  "description": "Pi workbench with remote-only execution, managed egress and isolated server workspaces",
+  "description": "Pi workbench with isolated local and remote projects, managed egress and portable configuration",
   "type": "module",
   "license": "MIT",
   "bin": {

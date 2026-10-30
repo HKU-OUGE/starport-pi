@@ -71,3 +71,12 @@ possible. Do not guess a unit name or stop all Node, SSH, or proxy processes.
 
 Report what was disabled, what remains, and the evidence. Do not report complete
 removal when only a startup registration was deleted.
+
+## Owned local runtime
+
+The default uninstall preserves the dedicated WSL2 disk and its projects. Do not
+run `wsl --shutdown` or unregister other distributions. Terminating the owned
+distribution would stop its jobs; obtain explicit scope before doing so. Before
+any requested permanent removal, verify the distribution and owner marker against
+the private receipt and export wanted projects. Removing startup registration
+alone does not delete a local runtime.

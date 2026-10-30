@@ -19,6 +19,7 @@ import {
 } from "./access.mjs";
 import { PanelStore, safeError } from "./panel-store.mjs";
 import { Setup } from "./setup.mjs";
+import { modelChoices } from "./models.mjs";
 
 const webRoot = fileURLToPath(new URL("../web-dist/", import.meta.url));
 const mime = {
@@ -65,7 +66,13 @@ function json(req, res, status, value) {
 }
 export async function startPanel(
   root,
-  { port = 18900, store, authOptions = {}, useModelProxy = true, maintenance = true } = {},
+  {
+    port = 18900,
+    store,
+    authOptions = {},
+    useModelProxy = true,
+    maintenance = true,
+  } = {},
 ) {
   if (!Number.isInteger(port) || port < 0 || port > 65535)
     throw new Error("invalid_panel_port");
@@ -199,7 +206,7 @@ export async function startPanel(
       if (p === "/api/setup" && req.method === "POST") {
         if (c.mode !== "local" && !same(req.headers["x-starport-admin"], key))
           throw new Error("operator_key_required");
-        const { action, ...input } = await body(req, 5 * 1024 * 1024);
+        const { action, ...input } = await body(req, 24 * 1024 * 1024);
         send(await setup.dispatch(action, input));
         return;
       }
@@ -208,6 +215,10 @@ export async function startPanel(
         send({
           csrf: csrfFor(key, identity),
           mode: c.mode,
+          models: await modelChoices(root),
+          serverKinds: Object.fromEntries(
+            Object.entries(config.servers).map(([n, s]) => [n, s.mode]),
+          ),
           servers: Object.keys(config.servers).filter(
             (name) => config.servers[name].initialized !== false,
           ),
@@ -426,7 +437,7 @@ export async function startPanel(
     throw e;
   }
   setup.port = server.address().port;
-  if(maintenance)setup.startMaintenance();
+  if (maintenance) setup.startMaintenance();
   return {
     server,
     store: db,

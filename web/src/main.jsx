@@ -5,6 +5,22 @@ import { createSHA256 } from "hash-wasm";
 import { api, setCsrf, fileUrl } from "./api";
 import "./style.css";
 const Setup = lazy(() => import("./Setup"));
+class SetupBoundary extends React.Component {
+  state = { failed: false };
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+  render() {
+    return this.state.failed ? (
+      <div className="card" role="alert">
+        <p>管理界面加载失败，可能已更新版本。</p>
+        <button onClick={() => location.reload()}>重新加载界面</button>
+      </div>
+    ) : (
+      this.props.children
+    );
+  }
+}
 const bytes = (n) =>
   n < 1024
     ? n + " B"
@@ -13,15 +29,15 @@ const bytes = (n) =>
       : (n / 1048576).toFixed(1) + " MiB";
 const label = (s) =>
   ({
-    idle: "已就緒",
+    idle: "已就绪",
     thinking: "思考中",
-    tool: "執行工具",
-    error: "需要處理",
-    interrupted: "已中斷",
-    running: "執行中",
+    tool: "执行工具",
+    error: "需要处理",
+    interrupted: "已中断",
+    running: "执行中",
     completed: "已完成",
     succeeded: "已完成",
-    failed: "失敗",
+    failed: "失败",
     cancelled: "已取消",
     queued: "等待中",
   })[s] || s;
@@ -57,7 +73,7 @@ function Login({ onLogin }) {
     <main className="login">
       <div className="star-mark">✦</div>
       <h1>Starport Pi</h1>
-      <p>你的遠端工作台</p>
+      <p>你的远端工作台</p>
       <form
         className="card"
         onSubmit={async (e) => {
@@ -72,7 +88,7 @@ function Login({ onLogin }) {
         }}
       >
         <label className="field">
-          本機存取碼
+          本机访问码
           <input
             autoFocus
             type="password"
@@ -82,10 +98,10 @@ function Login({ onLogin }) {
             required
           />
         </label>
-        <button className="primary">進入工作台</button>
+        <button className="primary">进入工作台</button>
         {error && <p className="error">{error}</p>}
         <small>
-          使用啟動視窗中的存取碼。遠端網址請透過 Cloudflare Access 登入。
+          使用启动窗口中的访问码。远端网址请透过 Cloudflare Access 登录。
         </small>
       </form>
     </main>
@@ -93,7 +109,7 @@ function Login({ onLogin }) {
 }
 const mdComponents = {
   img: ({ src, alt }) => (
-    <span className="muted">[圖片：{alt || "attachment"}]</span>
+    <span className="muted">[图片：{alt || "attachment"}]</span>
   ),
   a: ({ href, children }) =>
     /^https?:\/\//.test(href || "") ? (
@@ -128,7 +144,7 @@ function Message({ row }) {
         {tool ? (
           <details className="tool">
             <summary>
-              {row.isError ? "工具未完成" : "工具結果"}
+              {row.isError ? "工具未完成" : "工具结果"}
               <span className="badge">{row.toolName}</span>
             </summary>
             <pre>
@@ -146,14 +162,14 @@ function Message({ row }) {
               </div>
             ) : c.type === "thinking" ? (
               <details className="thinking" key={i}>
-                <summary>思考過程</summary>
+                <summary>思考过程</summary>
                 <Markdown>{c.thinking}</Markdown>
               </details>
             ) : c.type === "toolCall" ? (
               <details key={i} className="tool" open={c.name === "bash"}>
                 <summary>
                   <Icon name="file" />
-                  {c.name === "bash" ? "遠端命令" : c.name}
+                  {c.name === "bash" ? "远端命令" : c.name}
                 </summary>
                 <pre>
                   {c.arguments?.command || JSON.stringify(c.arguments, null, 2)}
@@ -177,7 +193,7 @@ function App() {
     [guide, G] = useState(false),
     [newOpen, New] = useState(false),
     [title, Title] = useState(""),
-    [server, Server] = useState("");
+    [server, Server] = useState("__chat__");
   const [views, V] = useState({}),
     [message, M] = useState(""),
     [sending, Send] = useState(false),
@@ -208,7 +224,7 @@ function App() {
       E((e) =>
         ["Failed to fetch", "authentication_required"].includes(e) ? "" : e,
       );
-      Server((v) => v || data.servers[0] || "");
+      Server((v) => v || "__chat__");
     } catch (e) {
       if (e.status === 401 && !wasLoggedIn.current) L(true);
       else E(e.message);
@@ -329,7 +345,7 @@ function App() {
         logCursor.current = d.cursor;
         Log(
           (s) =>
-            (d.truncated ? "[較舊日誌已輪替]\n" : "") +
+            (d.truncated ? "[较旧日志已轮替]\n" : "") +
             (s + d.text).slice(-2 * 1024 * 1024),
         );
       } catch (e) {
@@ -381,7 +397,7 @@ function App() {
   }
   async function upload(file) {
     if (!file) return;
-    U("計算校驗值");
+    U("计算校验值");
     E("");
     try {
       const hash = await createSHA256();
@@ -426,7 +442,7 @@ function App() {
         grant.offset = r.offset;
         sessionStorage.setItem(resumeKey, JSON.stringify(grant));
         U(
-          "上傳 " +
+          "上传 " +
             Math.round((grant.offset / Math.max(file.size, 1)) * 100) +
             "%",
         );
@@ -436,10 +452,10 @@ function App() {
       });
       if (done.sha256 !== sha256) throw new Error("upload_checksum");
       sessionStorage.removeItem(resumeKey);
-      M((s) => s + (s ? "\n" : "") + "已附加檔案：/workspace/" + done.path);
+      M((s) => s + (s ? "\n" : "") + "已附加文件：/workspace/" + done.path);
       readFiles();
     } catch (e) {
-      E(e.message + " · 重選同一檔案可接續");
+      E(e.message + " · 重选同一文件可接续");
     } finally {
       U("");
     }
@@ -448,7 +464,7 @@ function App() {
   if (!boot)
     return (
       <div className="loading">
-        <span className="star-mark">✦</span>正在連接 Starport Pi…
+        <span className="star-mark">✦</span>正在连接 Starport Pi…
         {error && <p>{error}</p>}
       </div>
     );
@@ -468,7 +484,7 @@ function App() {
       <header className="topbar">
         <button
           className="icon mobile"
-          aria-label="開啟會話列表"
+          aria-label="开启会话列表"
           onClick={() => Menu(!showMenu)}
         >
           <Icon name="menu" />
@@ -486,7 +502,7 @@ function App() {
         <div className="top-actions">
           <span className="connection">
             <i className={"dot " + (health?.ready ? "ok" : "")} />
-            {health?.ready ? "已連線" : "待設定"}
+            {health?.ready ? "已连接" : "待设置"}
           </span>
           <button
             onClick={() => {
@@ -498,8 +514,8 @@ function App() {
           </button>
           <button
             className="icon"
-            title="部署與管理"
-            aria-label="部署與管理"
+            title="部署与管理"
+            aria-label="部署与管理"
             onClick={() => {
               G(false);
               SetupView(true);
@@ -510,24 +526,26 @@ function App() {
         </div>
       </header>
       {showSetup ? (
-        <Suspense fallback={<p className="loading">正在載入管理介面…</p>}>
-          <Setup
-            guideOnly={guide}
-            onClose={() => {
-              SetupView(false);
-              refresh();
-            }}
-            onChange={refresh}
-          />
-        </Suspense>
+        <SetupBoundary>
+          <Suspense fallback={<p className="loading">正在加载管理界面…</p>}>
+            <Setup
+              guideOnly={guide}
+              onClose={() => {
+                SetupView(false);
+                refresh();
+              }}
+              onChange={refresh}
+            />
+          </Suspense>
+        </SetupBoundary>
       ) : (
         <div className="shell">
           <aside className={"sidebar " + (showMenu ? "visible" : "")}>
             <button className="primary new-session" onClick={() => New(true)}>
               <Icon name="plus" />
-              新增會話
+              新增会话
             </button>
-            <div className="sidebar-label">會話</div>
+            <div className="sidebar-label">会话</div>
             <nav>
               {boot.sessions.map((s) => (
                 <button
@@ -541,7 +559,9 @@ function App() {
                     <small>
                       {["thinking", "tool"].includes(s.status)
                         ? label(s.status)
-                        : s.server}
+                        : s.mode === "chat"
+                          ? "纯聊天"
+                          : s.server}
                     </small>
                   </span>
                 </button>
@@ -555,24 +575,17 @@ function App() {
               }}
             >
               <Icon name="settings" />
-              部署與管理
+              部署与管理
             </button>
           </aside>
           <main className="workspace">
             {!current ? (
               <div className="empty">
                 <div className="star-mark">✦</div>
-                <h1>開始你的下一段探索</h1>
-                <p>連接伺服器，建立一個遠端專案。</p>
-                <button
-                  className="primary"
-                  onClick={() =>
-                    boot.servers.length
-                      ? New(true)
-                      : (G(false), SetupView(true))
-                  }
-                >
-                  {boot.servers.length ? "新增會話" : "開啟部署向導"}
+                <h1>开始你的下一段探索</h1>
+                <p>开始聊天，或在隔离项目中开发。</p>
+                <button className="primary" onClick={() => New(true)}>
+                  新增会话
                 </button>
               </div>
             ) : (
@@ -580,7 +593,13 @@ function App() {
                 <div className="view-heading">
                   <div>
                     <h1>{current.title}</h1>
-                    <p>{current.server} · 遠端工作區</p>
+                    <p>
+                      {current.mode === "chat"
+                        ? "纯聊天"
+                        : boot.serverKinds?.[current.server] === "wsl"
+                          ? "本机隔离项目"
+                          : current.server + " · 远端项目"}
+                    </p>
                   </div>
                   <div className="live-state" role="status">
                     <i
@@ -600,27 +619,29 @@ function App() {
                     )}
                   </div>
                 </div>
-                <nav className="tabs" aria-label="工作區">
+                <nav className="tabs" aria-label="工作区">
                   <button
                     className={tab === "conversation" ? "active" : ""}
                     onClick={() => T("conversation")}
                   >
-                    對話
+                    对话
                   </button>
                   <button
+                    disabled={current.mode === "chat"}
                     className={tab === "tasks" ? "active" : ""}
                     onClick={() => {
                       T("tasks");
                       J((j) => j || current.jobs.at(-1)?.id || "");
                     }}
                   >
-                    任務 <span>{current.jobs.length}</span>
+                    任务 <span>{current.jobs.length}</span>
                   </button>
                   <button
+                    disabled={current.mode === "chat"}
                     className={tab === "files" ? "active" : ""}
                     onClick={() => T("files")}
                   >
-                    檔案
+                    文件
                   </button>
                 </nav>
                 {(error || current.error) && (
@@ -647,12 +668,18 @@ function App() {
                     >
                       <label>
                         模型
-                        <input
+                        <select
                           aria-label="模型"
                           value={model}
                           onChange={(e) => Model(e.target.value)}
                           disabled={working}
-                        />
+                        >
+                          {(boot.models || []).map((m) => (
+                            <option value={m.id} key={m.id}>
+                              {m.name}
+                            </option>
+                          ))}
+                        </select>
                       </label>
                       <label>
                         Effort
@@ -674,7 +701,7 @@ function App() {
                           ))}
                         </select>
                       </label>
-                      <button disabled={working}>套用</button>
+                      <button disabled={working}>应用</button>
                     </form>
                     <div className="messages">
                       {rows.map((row) => (
@@ -682,7 +709,9 @@ function App() {
                       ))}
                       {!rows.length && (
                         <p className="muted empty-message">
-                          說明目標，或附加專案檔案開始。
+                          {current.mode === "chat"
+                            ? "开始对话，无需连接服务器。"
+                            : "说明目标，或附加项目文件开始。"}
                         </p>
                       )}
                       <div ref={end} />
@@ -701,14 +730,15 @@ function App() {
                         type="button"
                         className="attach"
                         disabled={Boolean(uploading)}
+                        disabled={current.mode === "chat"}
                         onClick={() => fileInput.current.click()}
                       >
                         <Icon name="clip" />
                         <span>附加</span>
                       </button>
                       <textarea
-                        aria-label="訊息"
-                        placeholder="傳送訊息…"
+                        aria-label="消息"
+                        placeholder="发送消息…"
                         value={message}
                         onChange={(e) => {
                           M(e.target.value);
@@ -731,7 +761,7 @@ function App() {
                             )
                           }
                         >
-                          停止回覆
+                          停止回复
                         </button>
                       ) : (
                         <button
@@ -741,7 +771,7 @@ function App() {
                           }
                         >
                           <Icon name="send" />
-                          <span>傳送</span>
+                          <span>发送</span>
                         </button>
                       )}
                       {uploading && (
@@ -771,7 +801,7 @@ function App() {
                             {label(j.status || "queued")}
                           </span>
                           <small>
-                            {j.released ? "資源已釋放" : "資源待確認"}
+                            {j.released ? "资源已释放" : "资源待确认"}
                           </small>
                         </button>
                       ))}
@@ -779,7 +809,7 @@ function App() {
                     {job ? (
                       <>
                         <div className="task-toolbar">
-                          <b>即時日誌</b>
+                          <b>即时日志</b>
                           <a
                             href={
                               "data:text/plain;charset=utf-8," +
@@ -787,7 +817,7 @@ function App() {
                             }
                             download={"logs-" + job.slice(0, 8) + ".txt"}
                           >
-                            下載已載入日誌
+                            下载已加载日志
                           </a>
                           {!current.jobs.find((j) => j.id === job)
                             ?.released && (
@@ -804,13 +834,13 @@ function App() {
                                 }
                               }}
                             >
-                              取消此任務
+                              取消此任务
                             </button>
                           )}
                         </div>
-                        <pre className="logs">{logs || "等待日誌…"}</pre>
+                        <pre className="logs">{logs || "等待日志…"}</pre>
                         <div className="artifact-list">
-                          <h3>產物</h3>
+                          <h3>产物</h3>
                           <button
                             onClick={() =>
                               api(
@@ -820,7 +850,7 @@ function App() {
                                 .catch((e) => E(e.message))
                             }
                           >
-                            更新產物
+                            更新产物
                           </button>
                           {artifacts.map((f) => (
                             <a
@@ -837,7 +867,7 @@ function App() {
                       </>
                     ) : (
                       <p className="muted">
-                        還沒有任務。可在對話中要求執行驗證或訓練。
+                        还没有任务。可在对话中要求执行验证或训练。
                       </p>
                     )}
                   </section>
@@ -852,10 +882,13 @@ function App() {
                           readFiles();
                         }}
                       >
-                        根目錄
+                        根目录
                       </button>
-                      <button onClick={() => fileInput.current.click()}>
-                        上傳
+                      <button
+                        disabled={current.mode === "chat"}
+                        onClick={() => fileInput.current.click()}
+                      >
+                        上传
                       </button>
                       <input
                         type="file"
@@ -900,20 +933,20 @@ function App() {
                               )}
                               download
                             >
-                              下載 ↓
+                              下载 ↓
                             </a>
                           )}
                         </span>
                       </div>
                     ))}
-                    {!files.length && <p className="muted">工作區尚無檔案。</p>}
+                    {!files.length && <p className="muted">工作区尚无文件。</p>}
                   </section>
                 )}
               </>
             )}
           </main>
           <aside className="activity">
-            <h2>任務動態</h2>
+            <h2>任务动态</h2>
             {current?.jobs
               .slice(-4)
               .reverse()
@@ -934,11 +967,17 @@ function App() {
                 </button>
               ))}
             {!current?.jobs.length && (
-              <p className="muted">新的執行紀錄會顯示於此。</p>
+              <p className="muted">新的执行记录会显示于此。</p>
             )}
             <div className="resource">
-              <h3>{current?.server || "伺服器"}</h3>
-              {health?.ready ? (
+              <h3>
+                {current?.mode === "chat"
+                  ? "纯聊天"
+                  : current?.server || "项目环境"}
+              </h3>
+              {current?.mode === "chat" ? (
+                <p>无需服务器</p>
+              ) : health?.ready ? (
                 <>
                   <p>
                     {health.cpus} CPU · {health.memoryGiB} GiB
@@ -946,12 +985,12 @@ function App() {
                   <p>
                     {health.gpus} GPU{" "}
                     <span className="badge">
-                      {health.networkReady ? "出口已連接" : "出口離線"}
+                      {health.networkReady ? "出口已连接" : "出口离线"}
                     </span>
                   </p>
                 </>
               ) : (
-                <p>尚未連接</p>
+                <p>尚未连接</p>
               )}
             </div>
           </aside>
@@ -974,9 +1013,9 @@ function App() {
               }
             }}
           >
-            <h2>新增會話</h2>
+            <h2>新增会话</h2>
             <label className="field">
-              專案名稱
+              项目名称
               <input
                 autoFocus
                 value={title}
@@ -986,15 +1025,19 @@ function App() {
               />
             </label>
             <label className="field">
-              伺服器
+              执行环境
               <select
                 value={server}
                 onChange={(e) => Server(e.target.value)}
                 required
               >
-                <option value="">選擇已初始化的伺服器</option>
+                <option value="__chat__">纯聊天 · 无需服务器</option>
                 {boot.servers.map((s) => (
-                  <option key={s}>{s}</option>
+                  <option key={s} value={s}>
+                    {boot.serverKinds?.[s] === "wsl"
+                      ? "本机隔离项目"
+                      : s + " · 远端项目"}
+                  </option>
                 ))}
               </select>
             </label>
@@ -1003,9 +1046,7 @@ function App() {
               <button type="button" onClick={() => New(false)}>
                 取消
               </button>
-              <button className="primary" disabled={!server}>
-                建立
-              </button>
+              <button className="primary">建立</button>
             </div>
           </form>
         </div>

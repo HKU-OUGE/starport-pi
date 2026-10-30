@@ -6,8 +6,9 @@ For an explicitly requested removal, read
 [skills/starport-uninstall/SKILL.md](skills/starport-uninstall/SKILL.md).
 
 This is a Windows-native Pi SDK workbench. The operator process manages
-credentials and connections; model-generated commands run on a remote Linux
-worker. WSL2 is optional. Use the repository's actual commands and validation
+credentials and connections; model-generated commands run in a verified gVisor
+worker, either remote Linux or the dedicated Windows WSL2 runtime. Chat-only
+sessions have no execution tools. WSL2 is optional for chat and remote projects. Use the repository's actual commands and validation
 receipts; do not substitute the upstream Pi local shell for the remote tools.
 
 For source changes, keep user identities, real deployment addresses, credentials

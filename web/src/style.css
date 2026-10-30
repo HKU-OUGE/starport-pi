@@ -926,6 +926,9 @@ code {
   .modelbar select {
     max-width: 75px;
   }
+  .modelbar label:first-child select {
+    max-width: 175px;
+  }
   .modelbar button {
     margin-left: auto;
   }

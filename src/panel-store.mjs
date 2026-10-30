@@ -3,6 +3,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { load, writePrivate, privateDir } from "./config.mjs";
 import { Remote } from "./transport.mjs";
+import { modelChoices } from "./models.mjs";
 import { makeSession } from "./session.mjs";
 
 const uid = () => crypto.randomBytes(16).toString("hex");
@@ -60,9 +61,11 @@ export class PanelStore {
   }
   config(r) {
     const c = load(this.root);
-    if (!c.servers[r.server]) throw new Error("server_not_configured");
+    if (r.mode !== "chat" && !c.servers[r.server])
+      throw new Error("server_not_configured");
     return {
       ...c,
+      mode: r.mode || "workspace",
       activeServer: r.server,
       workspace: r.workspace,
       model: r.model,
@@ -70,6 +73,12 @@ export class PanelStore {
     };
   }
   remote(r) {
+    if (r.mode === "chat")
+      return {
+        call: async () => {
+          throw new Error("conversation_has_no_execution_environment");
+        },
+      };
     const remote = this.remoteFactory(this.config(r), this.root);
     return {
       call: async (op, args = {}, opts = {}) => {
@@ -102,21 +111,22 @@ export class PanelStore {
     if (typeof title !== "string" || !title.trim() || title.length > 100)
       throw new Error("invalid_session_title");
     const config = load(this.root);
-    if (!Object.hasOwn(config.servers, server))
+    const chat = server === "__chat__" || !server;
+    if (!chat && !Object.hasOwn(config.servers, server))
       throw new Error("server_not_configured");
-    if (config.servers[server].initialized === false)
+    if (!chat && config.servers[server].initialized === false)
       throw new Error("server_initialization_required");
     if (this.rows.length >= 200) throw new Error("session_limit");
-    const remote = this.remoteFactory(
-        { ...config, activeServer: server },
-        this.root,
-      ),
-      workspace = (await remote.call("workspace.create")).id;
+    const remote = chat
+        ? null
+        : this.remoteFactory({ ...config, activeServer: server }, this.root),
+      workspace = chat ? uid() : (await remote.call("workspace.create")).id;
     if (!/^[a-f0-9]{32}$/.test(workspace)) throw new Error("invalid_workspace");
     const row = {
       id: uid(),
       title: title.trim(),
-      server,
+      server: chat ? "__chat__" : server,
+      mode: chat ? "chat" : "workspace",
       workspace,
       model: config.model,
       effort: config.effort,
@@ -246,7 +256,7 @@ export class PanelStore {
       throw new Error("session_busy");
     if (
       typeof model !== "string" ||
-      !/^claude-[a-z0-9.-]{1,80}$/.test(model) ||
+      !(await modelChoices(this.root)).some((m) => m.id === model) ||
       !["off", "minimal", "low", "medium", "high", "xhigh", "max"].includes(
         effort,
       )
@@ -276,7 +286,9 @@ export class PanelStore {
     this.refreshing = true;
     try {
       const config = load(this.root);
-      for (const server of Object.keys(config.servers)) {
+      for (const server of Object.keys(config.servers).filter(
+        (n) => config.servers[n].initialized !== false,
+      )) {
         try {
           const h = await this.remoteFactory(
             { ...config, activeServer: server },

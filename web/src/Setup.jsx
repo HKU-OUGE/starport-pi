@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { setup, setAdmin } from "./api";
 
 const initialServer = {
@@ -47,10 +47,35 @@ export default function Setup({ onClose, onChange, guideOnly = false }) {
     [dir, D] = useState(""),
     [cf, C] = useState({ zone: "", prefix: "console", emails: "", token: "" }),
     [model, M] = useState({ model: "claude-sonnet-5-5", apiKey: "" });
+  const loaded = useRef({});
+  const [exportPassword, ExportPassword] = useState("");
+  const [transfer, Transfer] = useState({
+    password: "",
+    bundle: null,
+    name: "",
+    preview: null,
+    activateNetwork: true,
+  });
+  const [local, Local] = useState({ cpus: 4, memoryGiB: 4 });
   const refresh = () =>
     setup("state")
       .then((s) => {
         S(s);
+        if (loaded.current.model !== s.model) {
+          loaded.current.model = s.model;
+          M((m) => ({ ...m, model: s.model || m.model }));
+        }
+        const draft = JSON.stringify(s.cloudflareDraft);
+        if (loaded.current.draft !== draft) {
+          loaded.current.draft = draft;
+          if (s.cloudflareDraft)
+            C((c) => ({
+              ...c,
+              zone: s.cloudflareDraft.zone,
+              prefix: s.cloudflareDraft.prefix,
+              emails: s.cloudflareDraft.allowedEmails.join("\n"),
+            }));
+        }
         N((n) => n || s.selectedNode || "");
       })
       .catch((e) => E(e.message));
@@ -89,17 +114,19 @@ export default function Setup({ onClose, onChange, guideOnly = false }) {
       <div className="view-heading">
         <div>
           <div className="eyebrow">MISSION CONTROL</div>
-          <h1>部署與管理</h1>
+          <h1>部署与管理</h1>
         </div>
         <button onClick={onClose}>返回工作台</button>
       </div>
-      <nav className="tabs" aria-label="管理分類">
+      <nav className="tabs" aria-label="管理分类">
         {[
-          ["network", "01 訂閱與出口"],
-          ["servers", "02 伺服器"],
-          ["access", "03 遠端入口"],
+          ["network", "01 订阅与出口"],
+          ["servers", "02 服务器"],
+          ["access", "03 远端入口"],
           ["model", "模型"],
-          ["keys", "SSH 金鑰"],
+          ["local", "本机隔离"],
+          ["transfer", "导入与导出"],
+          ["keys", "SSH 密钥"],
           ["guide", "指引"],
         ].map(([id, label]) => (
           <button
@@ -122,14 +149,14 @@ export default function Setup({ onClose, onChange, guideOnly = false }) {
             refresh();
           }}
         >
-          <h2>解鎖管理功能</h2>
+          <h2>解锁管理功能</h2>
           <Input
-            label="本機啟動視窗中的管理存取碼"
+            label="本机启动窗口中的管理访问码"
             type="password"
             value={admin}
             onChange={(e) => A(e.target.value)}
           />
-          <button className="primary">解鎖</button>
+          <button className="primary">解锁</button>
         </form>
       )}
       {error && (
@@ -147,37 +174,37 @@ export default function Setup({ onClose, onChange, guideOnly = false }) {
               if (r) Sub({ ...sub, url: "", text: "" });
             }}
           >
-            <h2>匯入訂閱</h2>
+            <h2>导入订阅</h2>
             <Input
-              label="名稱"
+              label="名称"
               value={sub.label}
               onChange={(e) => Sub({ ...sub, label: e.target.value })}
             />
             <Input
-              label="HTTPS 訂閱網址"
+              label="HTTPS 订阅网址"
               type="password"
               autoComplete="off"
               value={sub.url}
               onChange={(e) => Sub({ ...sub, url: e.target.value })}
             />
             <details>
-              <summary>或貼上 YAML／節點清單</summary>
+              <summary>或贴上 YAML／节点清单</summary>
               <textarea
                 rows="5"
-                aria-label="訂閱內容"
+                aria-label="订阅内容"
                 value={sub.text}
                 onChange={(e) => Sub({ ...sub, text: e.target.value })}
               />
             </details>
             <button className="primary" disabled={disabled}>
-              匯入節點
+              导入节点
             </button>
           </form>
           <div className="card">
-            <h2>選擇出口</h2>
-            <Field label="節點">
+            <h2>选择出口</h2>
+            <Field label="节点">
               <select value={node} onChange={(e) => N(e.target.value)}>
-                <option value="">選擇節點</option>
+                <option value="">选择节点</option>
                 {state?.nodes.map((n) => (
                   <option key={n.id} value={n.id}>
                     {n.subscription} / {n.label}
@@ -190,11 +217,11 @@ export default function Setup({ onClose, onChange, guideOnly = false }) {
               disabled={disabled || !node}
               onClick={() => run("network-apply", { node })}
             >
-              套用並啟動
+              应用并启动
             </button>
             <div className="status-line">
               <i className={"dot " + (state?.proxy?.running ? "ok" : "")} />
-              {state?.proxy?.running ? "代理已運作" : "尚未啟動"}
+              {state?.proxy?.running ? "代理已运作" : "尚未启动"}
             </div>
             {state?.subscriptions.map((s) => (
               <div className="list-row" key={s.id}>
@@ -233,14 +260,14 @@ export default function Setup({ onClose, onChange, guideOnly = false }) {
               }
             }}
           >
-            <h2>新增伺服器</h2>
+            <h2>新增服务器</h2>
             <Input
-              label="公開別名"
+              label="公开别名"
               value={server.name}
               onChange={(e) => update("name", e.target.value)}
               required
             />
-            <Field label="連線方式">
+            <Field label="连接方式">
               <select
                 value={server.mode}
                 onChange={(e) => update("mode", e.target.value)}
@@ -260,13 +287,13 @@ export default function Setup({ onClose, onChange, guideOnly = false }) {
             ) : (
               <>
                 <Input
-                  label="實例 ID"
+                  label="实例 ID"
                   value={server.instanceId}
                   onChange={(e) => update("instanceId", e.target.value)}
                   required
                 />
                 <Input
-                  label="實際區域 ID"
+                  label="实际区域 ID"
                   value={server.region}
                   onChange={(e) => update("region", e.target.value)}
                   required
@@ -291,7 +318,7 @@ export default function Setup({ onClose, onChange, guideOnly = false }) {
                   required
                 />
                 <Input
-                  label="STS Token（選填）"
+                  label="STS Token（选填）"
                   type="password"
                   value={server.stsToken}
                   onChange={(e) => update("stsToken", e.target.value)}
@@ -300,26 +327,26 @@ export default function Setup({ onClose, onChange, guideOnly = false }) {
             )}
             {server.keyId ? (
               <p className="success">
-                已選擇本機匹配金鑰{" "}
+                已选择本机匹配密钥{" "}
                 <button type="button" onClick={() => update("keyId", null)}>
-                  更換
+                  更换
                 </button>
               </p>
             ) : (
               <>
-                <Field label="SSH 私鑰">
+                <Field label="SSH 私钥">
                   <textarea
                     rows="3"
                     autoComplete="off"
                     spellCheck="false"
                     value={server.privateKey}
                     onChange={(e) => update("privateKey", e.target.value)}
-                    placeholder="貼上私鑰，或選取檔案"
+                    placeholder="贴上私钥，或选取文件"
                   />
                 </Field>
                 <input
                   type="file"
-                  aria-label="選取私鑰檔案"
+                  aria-label="选取私钥文件"
                   onChange={async (e) => {
                     if (e.target.files[0])
                       update("privateKey", await e.target.files[0].text());
@@ -327,13 +354,13 @@ export default function Setup({ onClose, onChange, guideOnly = false }) {
                   }}
                 />
                 <button type="button" onClick={() => T("keys")}>
-                  查找匹配的私鑰
+                  查找匹配的私钥
                 </button>
               </>
             )}
             <div className="form-row">
               <Input
-                label="CPU 核心預算"
+                label="CPU 核心预算"
                 type="number"
                 min="1"
                 max="512"
@@ -341,7 +368,7 @@ export default function Setup({ onClose, onChange, guideOnly = false }) {
                 onChange={(e) => update("cpus", Number(e.target.value))}
               />
               <Input
-                label="記憶體 GiB"
+                label="内存 GiB"
                 type="number"
                 min="2"
                 value={server.memoryGiB}
@@ -349,37 +376,39 @@ export default function Setup({ onClose, onChange, guideOnly = false }) {
               />
             </div>
             <Input
-              label="專用 GPU 編號（逗號分隔；留空為 CPU）"
+              label="专用 GPU 编号（逗号分隔；留空为 CPU）"
               value={server.gpuText}
               onChange={(e) => update("gpuText", e.target.value)}
             />
             <button className="primary" disabled={disabled}>
-              新增並測試連線
+              新增并测试连接
             </button>
           </form>
           <div className="card">
-            <h2>伺服器初始化</h2>
-            {state?.servers.map((s) => (
-              <button
-                key={s.name}
-                className={
-                  "server-row " + (selected === s.name ? "selected" : "")
-                }
-                onClick={() => Q(s.name)}
-              >
-                <span>
-                  {s.name}
-                  <small>
-                    {s.budget
-                      ? `${s.budget.cpus} CPU · ${s.budget.memoryGiB} GiB`
-                      : s.mode}
-                  </small>
-                </span>
-                <span className="badge">
-                  {s.initialized ? "已啟用" : "待初始化"}
-                </span>
-              </button>
-            ))}
+            <h2>服务器初始化</h2>
+            {state?.servers
+              .filter((s) => s.mode !== "wsl")
+              .map((s) => (
+                <button
+                  key={s.name}
+                  className={
+                    "server-row " + (selected === s.name ? "selected" : "")
+                  }
+                  onClick={() => Q(s.name)}
+                >
+                  <span>
+                    {s.name}
+                    <small>
+                      {s.budget
+                        ? `${s.budget.cpus} CPU · ${s.budget.memoryGiB} GiB`
+                        : s.mode}
+                    </small>
+                  </span>
+                  <span className="badge">
+                    {s.initialized ? "已启用" : "待初始化"}
+                  </span>
+                </button>
+              ))}
             {selected &&
               !state?.servers.find((s) => s.name === selected)?.initialized && (
                 <>
@@ -387,11 +416,11 @@ export default function Setup({ onClose, onChange, guideOnly = false }) {
                     disabled={disabled}
                     onClick={() => run("server-scan", { name: selected })}
                   >
-                    重新測試連線
+                    重新测试连接
                   </button>
                   {lastScan && (
                     <div className="verification">
-                      <h3>核對 SSH 主機指紋</h3>
+                      <h3>核对 SSH 主机指纹</h3>
                       <code>{lastScan.fingerprints.join("\n")}</code>
                       <button
                         className="primary"
@@ -403,14 +432,14 @@ export default function Setup({ onClose, onChange, guideOnly = false }) {
                           })
                         }
                       >
-                        指紋正確，初始化環境
+                        指纹正确，初始化环境
                       </button>
                     </div>
                   )}
                 </>
               )}
             <p>
-              初始化包含執行環境、出口通道與隔離自測。驗證通過後才可建立會話。
+              初始化包含执行环境、出口通道与隔离自测。验证通过后才可建立会话。
             </p>
           </div>
         </div>
@@ -437,18 +466,18 @@ export default function Setup({ onClose, onChange, guideOnly = false }) {
               onChange={(e) => C({ ...cf, token: e.target.value })}
             />
             <Input
-              label="託管網域"
+              label="托管域名"
               placeholder="example.com"
               value={cf.zone}
               onChange={(e) => C({ ...cf, zone: e.target.value })}
               required
             />
             <Input
-              label="網域前綴"
+              label="域名前缀"
               value={cf.prefix}
               onChange={(e) => C({ ...cf, prefix: e.target.value })}
             />
-            <Field label="允許登入的完整信箱（每行一個）">
+            <Field label="允许登录的完整邮箱（每行一个）">
               <textarea
                 value={cf.emails}
                 rows="4"
@@ -460,11 +489,11 @@ export default function Setup({ onClose, onChange, guideOnly = false }) {
               className="primary"
               disabled={busy || Boolean(state?.cloudflare)}
             >
-              檢查並分配空閒網址
+              检查并分配空闲网址
             </button>
           </form>
           <div className="card">
-            <h2>遠端入口</h2>
+            <h2>远端入口</h2>
             {state?.cloudflare ? (
               <>
                 <a
@@ -475,7 +504,7 @@ export default function Setup({ onClose, onChange, guideOnly = false }) {
                 >
                   {state.cloudflare.url}
                 </a>
-                <p>狀態：{state.cloudflare.stage}</p>
+                <p>状态：{state.cloudflare.stage}</p>
                 <ul>
                   {state.cloudflare.allowedEmails.map((e) => (
                     <li key={e}>{e}</li>
@@ -486,16 +515,16 @@ export default function Setup({ onClose, onChange, guideOnly = false }) {
                   disabled={busy}
                   onClick={() => run("cloudflare-apply")}
                 >
-                  套用 Access 並啟動 Tunnel
+                  应用 Access 并启动 Tunnel
                 </button>
                 <button disabled={busy} onClick={() => run("cloudflare-start")}>
                   重接 Tunnel
                 </button>
               </>
             ) : (
-              <p>填入設定後，這裡會先顯示分配的網址與登入名單。</p>
+              <p>填入设置后，这里会先显示分配的网址与登录名单。</p>
             )}
-            <button onClick={() => T("guide")}>查看 Token 權限與指引</button>
+            <button onClick={() => T("guide")}>查看 Token 权限与指引</button>
           </div>
         </div>
       )}
@@ -515,24 +544,242 @@ export default function Setup({ onClose, onChange, guideOnly = false }) {
             value={model.apiKey}
             onChange={(e) => M({ ...model, apiKey: e.target.value })}
             placeholder={
-              state?.apiKeyConfigured ? "已儲存；留空保留" : "sk-ant-…"
+              state?.apiKeyConfigured ? "已保存；留空保留" : "sk-ant-…"
             }
           />
-          <Input
-            label="新會話預設模型"
-            value={model.model}
-            onChange={(e) => M({ ...model, model: e.target.value })}
-          />
+          <Field label="新会话默认模型">
+            <select
+              value={model.model}
+              onChange={(e) => M({ ...model, model: e.target.value })}
+            >
+              {(state?.models || []).map((m) => (
+                <option value={m.id} key={m.id}>
+                  {m.name}
+                </option>
+              ))}
+            </select>
+          </Field>
           <button className="primary" disabled={busy}>
-            儲存
+            保存
           </button>
         </form>
+      )}
+      {tab === "local" && (
+        <div className="settings-grid">
+          <form
+            className="card"
+            onSubmit={async (e) => {
+              e.preventDefault();
+              await run("local-initialize", local);
+            }}
+          >
+            <h2>本机隔离项目</h2>
+            <p>Windows 原生面板 · 专用 WSL2 · gVisor</p>
+            <Input
+              label="CPU 核数"
+              type="number"
+              min="1"
+              max="64"
+              value={local.cpus}
+              onChange={(e) =>
+                Local({ ...local, cpus: Number(e.target.value) })
+              }
+            />
+            <Input
+              label="内存（GiB）"
+              type="number"
+              min="2"
+              max="256"
+              value={local.memoryGiB}
+              onChange={(e) =>
+                Local({ ...local, memoryGiB: Number(e.target.value) })
+              }
+            />
+            <button
+              className="primary"
+              disabled={disabled || state?.platform !== "win32"}
+            >
+              初始化并验证本机环境
+            </button>
+            {state?.platform !== "win32" && (
+              <p>此入口适用于 Windows x64；当前系统可使用纯聊天或远端项目。</p>
+            )}
+          </form>
+          <div className="card">
+            <h2>项目边界</h2>
+            <p>
+              每个会话有独立项目目录。固定环境变量，禁止直接联网，仅通过选定出口。Windows
+              磁盘和凭证不挂入项目。
+            </p>
+            <p>首次初始化需要已启用 WSL2。准备命令：</p>
+            <pre>wsl --install --no-distribution</pre>
+            <p>
+              在管理员 PowerShell
+              执行，按系统提示完成重启。初始化通过实际隔离自测后，才会出现“本机隔离项目”选项。目前提供
+              CPU 执行。
+            </p>
+            {state?.servers
+              .filter((s) => s.mode === "wsl")
+              .map((s) => (
+                <p key={s.name}>
+                  {s.name} · {s.initialized ? "验证通过" : "待验证"}
+                </p>
+              ))}
+          </div>
+        </div>
+      )}
+      {tab === "transfer" && (
+        <div className="settings-grid">
+          <form
+            className="card"
+            onSubmit={async (e) => {
+              e.preventDefault();
+              const r = await run("config-export", {
+                password: exportPassword,
+              });
+              if (r?.bundle) {
+                const url = URL.createObjectURL(
+                  new Blob([JSON.stringify(r.bundle, null, 2)], {
+                    type: "application/json",
+                  }),
+                );
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = "starport-profile.encrypted.json";
+                a.click();
+                setTimeout(() => URL.revokeObjectURL(url), 1000);
+                ExportPassword("");
+                R({ exported: true });
+              }
+            }}
+          >
+            <h2>导出配置</h2>
+            <p>加密保存模型、订阅、服务器连接和远端入口设置。</p>
+            <Input
+              label="加密密码（至少 12 个字符）"
+              type="password"
+              autoComplete="new-password"
+              minLength="12"
+              value={exportPassword}
+              onChange={(e) => ExportPassword(e.target.value)}
+              required
+            />
+            <button className="primary" disabled={disabled}>
+              下载加密配置
+            </button>
+            {result?.exported && <p role="status">已生成加密下载文件。</p>}
+          </form>
+          <form
+            className="card"
+            onSubmit={async (e) => {
+              e.preventDefault();
+              const r = await run("config-import", {
+                bundle: transfer.bundle,
+                password: transfer.password,
+                activateNetwork: transfer.activateNetwork,
+              });
+              if (r)
+                Transfer({
+                  ...transfer,
+                  password: "",
+                  bundle: null,
+                  preview: null,
+                  name: "",
+                });
+            }}
+          >
+            <h2>导入配置</h2>
+            <p>
+              用于新安装。现有配置不会被覆盖；导入后检查服务器，远端网址另行启用。
+            </p>
+            <Input
+              label="配置文件"
+              type="file"
+              accept=".json"
+              onChange={async (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                try {
+                  if (file.size > 24 * 1024 * 1024)
+                    throw new Error("profile_too_large");
+                  const bundle = JSON.parse(await file.text());
+                  Transfer((t) => ({
+                    ...t,
+                    name: file.name,
+                    bundle,
+                    preview: null,
+                  }));
+                } catch (err) {
+                  E(err.message);
+                }
+              }}
+            />
+            <Input
+              label="解密密码"
+              type="password"
+              autoComplete="off"
+              value={transfer.password}
+              onChange={(e) =>
+                Transfer({
+                  ...transfer,
+                  password: e.target.value,
+                  preview: null,
+                })
+              }
+            />
+            <button
+              type="button"
+              disabled={disabled || !transfer.bundle}
+              onClick={async () => {
+                const r = await run("config-preview", {
+                  bundle: transfer.bundle,
+                  password: transfer.password,
+                });
+                if (r) Transfer({ ...transfer, preview: r });
+              }}
+            >
+              检查配置
+            </button>
+            {transfer.preview && (
+              <div className="verification">
+                <p>
+                  {transfer.preview.model} · {transfer.preview.servers.length}{" "}
+                  个服务器 · {transfer.preview.subscriptions} 个订阅
+                </p>
+                <p>
+                  API Key：
+                  {transfer.preview.apiKeyIncluded ? "已包含" : "待填写"} ·
+                  Cloudflare Token：
+                  {transfer.preview.cloudflareTokenIncluded
+                    ? "已包含"
+                    : "待填写"}
+                </p>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={transfer.activateNetwork}
+                    onChange={(e) =>
+                      Transfer({
+                        ...transfer,
+                        activateNetwork: e.target.checked,
+                      })
+                    }
+                  />
+                  导入后应用选定出口
+                </label>
+                <button className="primary" disabled={disabled}>
+                  导入到当前新配置
+                </button>
+              </div>
+            )}
+          </form>
+        </div>
       )}
       {tab === "keys" && (
         <div className="settings-grid">
           <div className="card">
-            <h2>匹配已有私鑰</h2>
-            <Field label="已有的公鑰（選填，用於匹配）">
+            <h2>匹配已有私钥</h2>
+            <Field label="已有的公钥（选填，用于匹配）">
               <textarea
                 rows="3"
                 value={pub}
@@ -541,7 +788,7 @@ export default function Setup({ onClose, onChange, guideOnly = false }) {
               />
             </Field>
             <Input
-              label="搜尋目錄（留空使用目前使用者 .ssh）"
+              label="搜寻目录（留空使用目前使用者 .ssh）"
               value={dir}
               onChange={(e) => D(e.target.value)}
             />
@@ -556,7 +803,7 @@ export default function Setup({ onClose, onChange, guideOnly = false }) {
                 if (r) K(r.keys);
               }}
             >
-              查找匹配私鑰
+              查找匹配私钥
             </button>
             <button
               disabled={busy || !dir || !pub}
@@ -568,12 +815,12 @@ export default function Setup({ onClose, onChange, guideOnly = false }) {
                 if (r) K(r.keys);
               }}
             >
-              系統授權後查找指定目錄
+              系统授权后查找指定目录
             </button>
             {keys.map((k, i) => (
               <div className="key-row" key={k.keyId || i}>
                 <b>{k.name}</b>
-                <code>{k.fingerprint || "已加密；尚未驗證匹配"}</code>
+                <code>{k.fingerprint || "已加密；尚未验证匹配"}</code>
                 {k.keyId && (
                   <button
                     onClick={() => {
@@ -581,19 +828,19 @@ export default function Setup({ onClose, onChange, guideOnly = false }) {
                       T("servers");
                     }}
                   >
-                    用於新增伺服器
+                    用于新增服务器
                   </button>
                 )}
               </div>
             ))}
           </div>
           <div className="card">
-            <h2>建立新金鑰</h2>
-            <p>私鑰留在本機，只把公鑰加入伺服器的 authorized_keys。</p>
+            <h2>建立新密钥</h2>
+            <p>私钥留在本机，只把公钥加入服务器的 authorized_keys。</p>
             <pre>ssh-keygen -t ed25519 -C "starport"</pre>
             <p>
-              依提示選擇儲存位置與密語。副檔名 .pub 的檔案是公鑰；同名且沒有
-              .pub 的檔案是私鑰。
+              依提示选择保存位置与密语。副档名 .pub 的文件是公钥；同名且没有
+              .pub 的文件是私钥。
             </p>
             <button
               disabled={busy}
@@ -605,10 +852,10 @@ export default function Setup({ onClose, onChange, guideOnly = false }) {
                 }
               }}
             >
-              在私有目錄產生部署專用金鑰
+              在私有目录产生部署专用密钥
             </button>
             <small>
-              此按鈕產生無密語金鑰，依作業系統檔案權限保護。需要密語時使用上面的指令與
+              此按钮产生无密语密钥，依操作系统文件权限保护。需要密语时使用上面的指令与
               ssh-agent。
             </small>
             {pub && <pre>{pub}</pre>}
@@ -617,47 +864,53 @@ export default function Setup({ onClose, onChange, guideOnly = false }) {
       )}
       {tab === "guide" && (
         <article className="card guide">
-          <h2>從一台新電腦開始</h2>
+          <h2>从一台新电脑开始</h2>
           <ol>
-            <li>執行安裝器並啟動面板，使用終端中的存取碼登入。</li>
+            <li>执行安装器并启动面板，使用终端中的访问码登录。</li>
             <li>
-              匯入訂閱，選擇節點，按「套用並啟動」。Mihomo 會自動下載並校驗。
+              导入订阅，选择节点，按「应用并启动」。Mihomo 会自动下载并校验。
             </li>
             <li>
-              新增伺服器：貼上 SSH 指令與私鑰，或填 DSW 實例及 ProxyClient
-              憑證。VPC 指令需要本機已能連入該 VPC。
+              新增服务器：贴上 SSH 指令与私钥，或填 DSW 实例及 ProxyClient
+              凭证。VPC 指令需要本机已能连入该 VPC。
             </li>
             <li>
-              核對主機指紋，按「初始化環境」。系統下載已校驗的 rootfs 與
-              gVisor，建立出口並執行隔離自測。
+              核对主机指纹，按「初始化环境」。系统下载已校验的 rootfs 与
+              gVisor，建立出口并执行隔离自测。
             </li>
-            <li>填入 Claude API Key，建立會話。</li>
             <li>
-              如需手機遠端操作，填 Cloudflare
-              Token、網域及信箱名單，先檢查網址，再套用並登入新網址。
+              填入 Claude API
+              Key，从列表选择模型。可直接创建纯聊天，或选择通过验证的本机／远端项目。
+            </li>
+            <li>
+              已有加密配置时，在“导入与导出”中导入并应用出口，再核验服务器连接。
+            </li>
+            <li>
+              如需手机远端操作，填 Cloudflare
+              Token、域名及邮箱名单，先检查网址，再应用并登录新网址。
             </li>
           </ol>
-          <h3>Cloudflare Token 權限</h3>
+          <h3>Cloudflare Token 权限</h3>
           <p>
-            帳戶：Cloudflare Tunnel Edit、Access: Apps and Policies
+            帐户：Cloudflare Tunnel Edit、Access: Apps and Policies
             Edit、Access: Organizations, Identity Providers, and Groups
-            Read。網域：Zone Read、DNS Edit。僅授予目標帳戶與網域；Zero Trust
-            需先啟用電子郵件一次性 PIN 或其他登入方式。
+            Read。域名：Zone Read、DNS Edit。仅授予目标帐户与域名；Zero Trust
+            需先启用电子邮件一次性 PIN 或其他登录方式。
           </p>
-          <h3>每個人各自一套</h3>
+          <h3>每个人各自一套</h3>
           <p>
             不同使用者使用不同
-            STARPORT_PI_STATE、面板連接埠與遠端工作帳戶／實例；登入信箱只加入各自的
-            Access 名單。管理入口另需本機存取碼。
+            STARPORT_PI_STATE、面板连接埠与远端工作帐户／实例；登录邮箱只加入各自的
+            Access 名单。管理入口另需本机访问码。
           </p>
-          <h3>SSH 金鑰</h3>
+          <h3>SSH 密钥</h3>
           <pre>
             {
               'ssh-keygen -t ed25519 -C "starport"\nssh-keygen -y -f path/to/private_key\nssh-keygen -lf path/to/public_key.pub'
             }
           </pre>
           <p>
-            第二行從已有私鑰取出公鑰；無法從公鑰還原遺失的私鑰。不要把私鑰傳給其他人。加密私鑰需要先加入作業系統
+            第二行从已有私钥取出公钥；无法从公钥还原遗失的私钥。不要把私钥传给其他人。加密私钥需要先加入操作系统
             ssh-agent。
           </p>
         </article>
@@ -665,19 +918,20 @@ export default function Setup({ onClose, onChange, guideOnly = false }) {
       {busy && (
         <div role="status" className="status-line">
           <i className="spinner" />
-          正在處理…
+          正在处理…
         </div>
       )}
+      {result?.saved && <p role="status">已保存。</p>}
       {result?.url && (
         <div className="card">
           <a href={result.url} target="_blank" rel="noreferrer">
-            開啟 {result.url}
+            开启 {result.url}
           </a>
         </div>
       )}
       {state?.operations.length > 0 && (
         <section className="card operations">
-          <h2>部署進度</h2>
+          <h2>部署进度</h2>
           {state.operations.slice(0, 4).map((op) => (
             <div key={op.id} className="list-row">
               <div>
@@ -694,10 +948,10 @@ export default function Setup({ onClose, onChange, guideOnly = false }) {
                 {op.status === "complete"
                   ? "完成"
                   : op.status === "failed"
-                    ? "失敗"
+                    ? "失败"
                     : op.status === "interrupted"
-                      ? "待核對"
-                      : "進行中"}
+                      ? "待核对"
+                      : "进行中"}
               </span>
             </div>
           ))}

@@ -28,6 +28,15 @@ import { Remote, sshArgs, processCall } from "./transport.mjs";
 import { findKeys, elevatedMatch, publicKey, fingerprint } from "./keys.mjs";
 import { Cloudflare, Enrollment, readEnrollment } from "./cloudflare.mjs";
 import { safeError } from "./panel-store.mjs";
+import { modelChoices } from "./models.mjs";
+import {
+  exportProfile,
+  importProfile,
+  decodeProfile,
+  profileSummary,
+} from "./profile-transfer.mjs";
+import { installLocal } from "./install-local.mjs";
+import { closeLocalBridges } from "./local-bridge.mjs";
 
 export function parseSshCommand(value) {
   if (
@@ -133,7 +142,23 @@ export class Setup {
     const cf = fs.existsSync(cfFile)
       ? JSON.parse(fs.readFileSync(cfFile, "utf8"))
       : null;
+    const draftFile = path.join(this.root, "cloudflare", "enrollment.json");
+    const draft = fs.existsSync(draftFile)
+      ? JSON.parse(fs.readFileSync(draftFile, "utf8"))
+      : null;
     return {
+      model: c.model,
+      platform: process.platform,
+      cloudflareDraft: draft
+        ? {
+            zone: draft.zone,
+            prefix: draft.prefix || "console",
+            allowedEmails: draft.allowedEmails,
+            tokenConfigured: fs.existsSync(
+              path.join(this.root, "cloudflare", "api-token"),
+            ),
+          }
+        : null,
       apiKeyConfigured: fs.existsSync(path.join(this.root, "secrets.json")),
       nodes: listNodes(c, this.root),
       selectedNode: c.proxy.selected || null,
@@ -197,7 +222,47 @@ export class Setup {
   async dispatch(action, input = {}) {
     const c = load(this.root);
     if (action === "state")
-      return { ...this.snapshot(), proxy: await proxyStatus(c, this.root) };
+      return {
+        ...this.snapshot(),
+        models: await modelChoices(this.root),
+        proxy: await proxyStatus(c, this.root),
+      };
+    if (action === "config-export")
+      return {
+        bundle: await exportProfile(this.root, {
+          includeSecrets: true,
+          password: input.password,
+        }),
+      };
+    if (action === "local-initialize")
+      return this.start("local-runtime", (stage) =>
+        installLocal(this.root, {
+          cpus: input.cpus,
+          memoryGiB: input.memoryGiB,
+          stage,
+          verify: verifyWorker,
+        }),
+      );
+    if (action === "config-preview")
+      return profileSummary(await decodeProfile(input.bundle, input.password));
+    if (action === "config-import")
+      return this.start("configuration", async (stage) => {
+        stage("importing_configuration");
+        const result = await importProfile(
+          this.root,
+          input.bundle,
+          input.password,
+        );
+        const next = load(this.root);
+        if (input.activateNetwork && next.proxy.selected) {
+          stage("installing_mihomo");
+          next.proxy.binary = await this.tool(this.root, "mihomo");
+          save(next, this.root);
+          stage("applying_proxy");
+          await startProxy(next, this.root);
+        }
+        return result;
+      });
     if (action === "model") {
       if (input.apiKey) {
         if (
@@ -211,7 +276,7 @@ export class Setup {
         });
       }
       if (input.model) {
-        if (!/^claude-[a-z0-9.-]{1,80}$/.test(input.model))
+        if (!(await modelChoices(this.root)).some((m) => m.id === input.model))
           throw new Error("invalid_model");
         c.model = input.model;
       }
@@ -671,5 +736,10 @@ export class Setup {
     clearInterval(this.maintenanceTimer);
     clearTimeout(this.maintenanceStart);
     this.connector?.kill();
+    closeLocalBridges(
+      Object.values(load(this.root).servers)
+        .filter((s) => s.mode === "wsl")
+        .map((s) => s.distribution),
+    );
   }
 }

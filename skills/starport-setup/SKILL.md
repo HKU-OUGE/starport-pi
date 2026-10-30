@@ -1,6 +1,6 @@
 ---
 name: starport-setup
-description: Install and configure Starport Pi on Windows, Linux, or macOS; connect an existing Linux or Alibaba DSW worker; enroll a private web endpoint with Cloudflare Tunnel and per-user Access. Use for operator-side setup and validation, not for executing project commands locally.
+description: Install and configure Starport Pi on Windows, Linux, or macOS; connect an existing Linux or Alibaba DSW worker; enroll a private web endpoint with Cloudflare Tunnel and per-user Access. Use for operator-side setup and validation, not for executing project commands in the operator shell.
 ---
 
 # Starport Pi setup
@@ -11,6 +11,8 @@ this operator capability, cloud credentials, or local command tools.
 
 Read only the guide needed for the current stage:
 
+- Local isolated projects: [Local execution](../../docs/LOCAL.md).
+- Encrypted migration: [Configuration](../../docs/CONFIGURATION.md).
 - Native Windows or optional WSL2: [Windows](../../docs/WINDOWS.md).
 - Subscription, SSH/DSW, rootfs, GPU: [Setup](../../docs/SETUP.md).
 - Jobs, transfers, datasets: [Usage](../../docs/USAGE.md).
@@ -22,7 +24,10 @@ Read only the guide needed for the current stage:
 Inspect existing configuration and running services before installing anything.
 Use `STARPORT_PI_STATE` for a deliberate separate profile; otherwise use the OS
 user data directory selected by `src/config.mjs`. Do not copy a private profile
-into the source tree.
+into the source tree. The web interface defaults to Simplified Chinese; guest
+locale remains Traditional Chinese/Taipei. Ask which session mode is needed only
+when it is unclear: conversation-only needs no server; local isolated execution
+requires the dedicated WSL2 setup; remote projects use verified Linux workers.
 
 Collect only missing inputs: operating system, existing SSH alias or DSW ID and
 actual region, private key/ProxyClient configuration **file locations**, resource
@@ -51,6 +56,28 @@ still missing.
    Select a node and apply it. Never replace another application's system proxy.
 4. Run `node bin/starport-pi.mjs verify-server`. Verify a new host fingerprint
    against the server; do not disable strict host-key checking to fix a mismatch.
+
+## Local project execution
+
+Use the web wizard's Local isolation page on Windows x64. Enable WSL2 only when
+requested; never restart Windows automatically. Import only the dedicated,
+receipt-owned distribution. Verify automount and interop are disabled before
+installing the worker. Do not use an ordinary Ubuntu user's home directory or a
+Windows bind mount as the isolation boundary. Complete the real worker probe
+and confirm release before enabling sessions. No fallback to PowerShell, CMD,
+ordinary WSL bash, or the operator's Python is allowed for model commands.
+The local mode currently provides CPU execution. Do not claim WSL GPU support.
+
+## Migrate configuration
+
+Use the encrypted profile flow in the Configuration guide. Read the preview
+before importing into a fresh profile. Keep the export outside Git, and do not
+print its password or credentials. Imported remote connections start unverified;
+check current resource availability and ownership before additive installation.
+A copied connection is not proof of protocol or dependency compatibility.
+Allocate a fresh Cloudflare hostname after import, keeping the previous console
+intact. Do not copy a tunnel connector token, live PID, host trust, or WSL distro
+identity to another computer. Ask about startup separately after validation.
 
 ## Ask about sign-in startup
 

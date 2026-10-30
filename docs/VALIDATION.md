@@ -1,27 +1,27 @@
-# 驗證範圍
+# 验证范围
 
-此文件區分可重現測試、實際伺服器驗收及尚未驗收的項目。
+此文件区分可重现测试、实际服务器验收及尚未验收的项目。
 
-| 項目 | 驗證方式 |
+| 项目 | 验证方式 |
 | --- | --- |
-| Windows 原生安裝 | GitHub Actions 的 Windows runner 執行 PowerShell 安裝器和 Node 測試 |
-| Pi 工具邊界 | 真實 Pi SDK、模擬模型 stream，核對工具只呼叫遠端 RPC、context 不含操作端路徑 |
-| 模型出口 | 真實 Pi provider transport 在代理不可用時失敗，禁止直連 fallback |
-| 訂閱／節點切換 | YAML／URI、TLS 與腳本拒絕測試；私有 controller 的重載測試 |
-| 檔案／資料 | traversal、symlink、FIFO、分塊續傳、收據恢復、版本不變性 |
-| 服務調度 | CPU／記憶體預留、工作區互斥、取消範圍、遺失 controller 與靜默任務區分 |
-| 實際 Linux／DSW | 獨立 CPU 資源上完成區域設定、檔案哈希、只讀資料、HTTPS、代理中斷及取消回收測試 |
+| Windows 原生安装 | GitHub Actions 的 Windows runner 执行 PowerShell 安装器和 Node 测试 |
+| Pi 工具边界 | 真实 Pi SDK、模拟模型 stream，核对工具只呼叫远端 RPC、context 不含操作端路径 |
+| 模型出口 | 真实 Pi provider transport 在代理不可用时失败，禁止直连 fallback |
+| 订阅／节点切换 | YAML／URI、TLS 与脚本拒绝测试；私有 controller 的重载测试 |
+| 文件／资料 | traversal、symlink、FIFO、分块续传、收据恢复、版本不变性 |
+| 服务调度 | CPU／内存预留、工作区互斥、取消范围、遗失 controller 与静默任务区分 |
+| 实际 Linux／DSW | 独立 CPU 资源上完成区域设置、文件哈希、只读资料、HTTPS、代理中断及取消回收测试 |
 
-2026-10-30 的已完成驗收收錄於 [validation.json](validation.json)：
+2026-10-30 的已完成验收收录于 [validation.json](validation.json)：
 
-- 台北時區、繁體 locale、UTF-8、三類 Noto CJK TC 字型通過。
-- 上傳檔案與下載結果 SHA-256 一致；資料版本不隨專案改動，任務內寫入被拒絕。
-- 宿主路徑與操作端憑證環境不可見，直接網路連線被封鎖。
-- 經所選代理的 HTTPS 回傳 200；停止獨立測試代理後，任務外網請求失敗。
-- 靜默任務保持執行；明確取消後確認資源釋放。
-- Windows 原生 PowerShell 安裝器及 Linux CI 均通過；20 項程式測試通過。
+- 台北时区、繁体 locale、UTF-8、三类 Noto CJK TC 字型通过。
+- 上传文件与下载结果 SHA-256 一致；资料版本不随项目改动，任务内写入被拒绝。
+- 宿主路径与操作端凭证环境不可见，直接网路连线被封锁。
+- 经所选代理的 HTTPS 回传 200；停止独立测试代理后，任务外网请求失败。
+- 静默任务保持执行；明确取消后确认资源释放。
+- Windows 原生 PowerShell 安装器及 Linux CI 均通过；20 项程式测试通过。
 
-測試只使用自建工作區及專用預留，沒有重啟既有服務或修改原有依賴環境。
+测试只使用自建工作区及专用预留，没有重启既有服务或修改原有依赖环境。
 
 ```bash
 npm ci --ignore-scripts
@@ -30,20 +30,44 @@ npm run test:server
 python3 scripts/audit_source.py
 ```
 
-`npm test` 驗證 Windows／Linux／macOS 原生客戶端。`test:server` 使用 Linux 的 flock、affinity 和安全檔案描述符，只在 Linux 執行；Windows／macOS 會清楚輸出 SKIP，直接使用 Python unittest discovery 也會略過。略過不代表 worker 已通過，遠端執行器仍須在 Linux 驗證。不要在 Windows 安裝替代 `fcntl` 或移除檔案鎖。
+`npm test` 验证 Windows／Linux／macOS 原生客户端。`test:server` 使用 Linux 的 flock、affinity 和安全文件描述符，只在 Linux 执行；Windows／macOS 会清楚输出 SKIP，直接使用 Python unittest discovery 也会略过。略过不代表 worker 已通过，远端执行器仍须在 Linux 验证。不要在 Windows 安装替代 `fcntl` 或移除文件锁。
 
-Windows CI 同時測試 Windows PowerShell 5.1 與 PowerShell 7 的 PATH 合併，重現並防止刷新後遺失僅存在於目前 shell 的 Node／npm／SSH 路徑。卸載測試以模擬程序驗證預覽不修改狀態、只停止本設定檔的程序、保留私有資料，以及拒絕回收後重用的 PID。
+Windows CI 同时测试 Windows PowerShell 5.1 与 PowerShell 7 的 PATH 合并，重现并防止刷新后遗失仅存在于目前 shell 的 Node／npm／SSH 路径。卸载测试以模拟程序验证预览不修改状态、只停止本设置档的程序、保留私有资料，以及拒绝回收后重用的 PID。
 
-WSL2 的安裝／重新啟動流程需在實際 Windows 電腦驗收，CI 不會修改虛擬化功能。
+WSL2 的安装／重新启动流程需在实际 Windows 电脑验收，CI 不会修改虚拟化功能。
 
-GPU 配置程式會核對真實驅動與 gVisor 支援表。完整 GPU 工作負載、特定 AI 框架、圖形渲染及所有 DSW 集群並非已通過項目；先完成各自的小任務驗收，再提供生產工作負載。
+GPU 配置程式会核对真实驱动与 gVisor 支援表。完整 GPU 工作负载、特定 AI 框架、图形渲染及所有 DSW 集群并非已通过项目；先完成各自的小任务验收，再提供生产工作负载。
 
-測試不使用真實模型 API Key，不把程式測試等同於付費模型的回答品質驗證。
+测试不使用真实模型 API Key，不把程式测试等同于付费模型的回答品质验证。
 
-## v0.2 網頁與部署向導
+## v0.2 网页与部署向导
 
-新增驗證覆蓋 Access JWT、跨站寫入拒絕、不同會話的上傳權限、SSH 指令解析、私鑰匹配，以及初始化必須同時通過隔離自測和資源回收。Cloudflare API 使用模擬回應核對創建順序、未知結果接續與只刪除本次資源；不使用個人帳戶建立測試入口。
+新增验证覆盖 Access JWT、跨站写入拒绝、不同会话的上传权限、SSH 指令解析、私钥匹配，以及初始化必须同时通过隔离自测和资源回收。Cloudflare API 使用模拟回应核对创建顺序、未知结果接续与只删除本次资源；不使用个人帐户建立测试入口。
 
-瀏覽器實測了桌面與手機布局、會話讀取／發送、工具卡片、訂閱文本匯入、檔案分塊上傳與下載。1,520,000 bytes 的同一檔案回傳 SHA-256 完全一致。會話模型使用真實 Pi SDK 加固定測試 stream，遠端使用測試 worker adapter；這不是一次付費模型或新 DSW 的生產驗收。
+浏览器实测了桌面与手机布局、会话读取／发送、工具卡片、订阅文本导入、文件分块上传与下载。1,520,000 bytes 的同一文件回传 SHA-256 完全一致。会话模型使用真实 Pi SDK 加固定测试 stream，远端使用测试 worker adapter；这不是一次付费模型或新 DSW 的生产验收。
 
-Windows、Linux、macOS 客戶端納入 CI。Windows 執行原生 PowerShell 安裝器、網頁建置、Node 測試與所有 PowerShell 腳本語法檢查；CI 不會彈 UAC、變更登入啟動工作或購買資源。首次部署仍需用使用者的實際連線完成指紋核對、遠端隔離自測及 Cloudflare 登入驗收。管理員彈窗的互動流程須在有桌面的目標系統完成驗收。
+Windows、Linux、macOS 客户端纳入 CI。Windows 执行原生 PowerShell 安装器、网页建置、Node 测试与所有 PowerShell 脚本语法检查；CI 不会弹 UAC、变更登入启动工作或购买资源。首次部署仍需用使用者的实际连线完成指纹核对、远端隔离自测及 Cloudflare 登入验收。管理员弹窗的互动流程须在有桌面的目标系统完成验收。
+
+## v0.3 configuration and local execution
+
+Tests cover authenticated encrypted exports, wrong passwords and tampering,
+portable private paths, fresh-profile-only import, and rejection of partial
+invalid configuration. Conversation-only sessions use the actual Pi SDK with
+zero tools; neither project files nor operator context are exposed.
+
+The local bridge is exercised with a real Python process and Unix socket on
+Linux, streaming 2 MiB through a fixed loopback peer and closing on channel loss.
+Portable import-image tests verify first-boot WSL automount and interop settings.
+These tests do not run a Windows hypervisor. WSL2 import, gVisor execution and
+resource limits must pass the built-in probe on the actual Windows computer;
+unverified local runtimes remain disabled.
+
+Browser verification for v0.3 covered conversation-only creation, model selection,
+encrypted download, decrypted preview and import into an empty profile. Imported
+servers remain disabled pending verification. Desktop 1280×720 and mobile
+390×844 layouts were checked; no horizontal overflow was present. A stale lazy
+module after rebuilding was found and given an explicit reload fallback.
+
+Local test results: 23 Node tests and 11 Python tests passed. Platform-specific
+WSL bridge tests run only on Linux; Windows and macOS skips are not execution
+acceptance.
