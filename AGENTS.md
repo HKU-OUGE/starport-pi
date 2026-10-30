@@ -2,6 +2,8 @@
 
 For installation, server configuration, or remote access enrollment, read
 [skills/starport-setup/SKILL.md](skills/starport-setup/SKILL.md).
+For an explicitly requested removal, read
+[skills/starport-uninstall/SKILL.md](skills/starport-uninstall/SKILL.md).
 
 This is a Windows-native Pi SDK workbench. The operator process manages
 credentials and connections; model-generated commands run on a remote Linux

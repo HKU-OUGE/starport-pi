@@ -39,6 +39,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\install.ps1
 
 - [網頁部署向導、金鑰與遠端存取](docs/REMOTE_ACCESS.md)
 - [Agent 安裝入口](AGENTS.md) · [安裝 Skill](skills/starport-setup/SKILL.md)
+- [停用與卸載 Skill](skills/starport-uninstall/SKILL.md)
 - [完整安裝與伺服器配置](docs/SETUP.md)
 - [操作、檔案與共享資料](docs/USAGE.md)
 - [隔離邊界與資源管理](SECURITY.md)

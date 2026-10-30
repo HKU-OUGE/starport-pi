@@ -11,7 +11,7 @@
   "scripts": {
     "start": "node bin/starport-pi.mjs",
     "test": "node --test tests/*.test.mjs",
-    "test:server": "python3 -m unittest discover -s tests -p 'test_*.py'",
+    "test:server": "node scripts/test-server.mjs",
     "audit:source": "python3 scripts/audit_source.py",
     "build": "vite build",
     "panel": "node bin/starport-pi.mjs panel",

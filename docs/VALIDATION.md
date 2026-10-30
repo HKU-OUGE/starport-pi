@@ -30,7 +30,11 @@ npm run test:server
 python3 scripts/audit_source.py
 ```
 
-`test:server` 使用 Linux 的 flock、affinity 和安全檔案描述符；Windows runner 驗證的是原生客戶端。WSL2 的安裝／重新啟動流程需在實際 Windows 電腦驗收，CI 不會修改虛擬化功能。
+`npm test` 驗證 Windows／Linux／macOS 原生客戶端。`test:server` 使用 Linux 的 flock、affinity 和安全檔案描述符，只在 Linux 執行；Windows／macOS 會清楚輸出 SKIP，直接使用 Python unittest discovery 也會略過。略過不代表 worker 已通過，遠端執行器仍須在 Linux 驗證。不要在 Windows 安裝替代 `fcntl` 或移除檔案鎖。
+
+Windows CI 同時測試 Windows PowerShell 5.1 與 PowerShell 7 的 PATH 合併，重現並防止刷新後遺失僅存在於目前 shell 的 Node／npm／SSH 路徑。卸載測試以模擬程序驗證預覽不修改狀態、只停止本設定檔的程序、保留私有資料，以及拒絕回收後重用的 PID。
+
+WSL2 的安裝／重新啟動流程需在實際 Windows 電腦驗收，CI 不會修改虛擬化功能。
 
 GPU 配置程式會核對真實驅動與 gVisor 支援表。完整 GPU 工作負載、特定 AI 框架、圖形渲染及所有 DSW 集群並非已通過項目；先完成各自的小任務驗收，再提供生產工作負載。
 

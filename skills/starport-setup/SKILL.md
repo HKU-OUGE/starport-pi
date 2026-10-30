@@ -52,6 +52,35 @@ still missing.
 4. Run `node bin/starport-pi.mjs verify-server`. Verify a new host fingerprint
    against the server; do not disable strict host-key checking to fix a mismatch.
 
+## Ask about sign-in startup
+
+After the workbench has been verified, ask the user explicitly:
+
+> 是否將 Starport Pi 註冊為「目前使用者登入後啟動」？這不是登入前執行的 Windows 系統服務。
+
+Register only after the user agrees. If they already made this explicit choice
+in the current setup conversation, apply it without asking again. If they decline
+or have not answered, leave automatic startup disabled. The installer itself does
+not register startup. With approval, run:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\register-panel.ps1
+```
+
+For removal, follow [the uninstall skill](../starport-uninstall/SKILL.md).
+
+## Platform-specific checks
+
+`npm test` validates the native client. `npm run test:server` runs Linux worker
+tests only on Linux; Windows/macOS explicitly report them as skipped. Python
+unittest discovery also skips them before importing the worker. Do not install a
+replacement `fcntl`, weaken file locks, or count a skip as worker acceptance.
+Use Linux CI or the remote worker probe for execution and isolation validation.
+
+On Windows, refresh PATH by preserving current-process entries and merging new
+machine/user entries. Do not replace the current PATH or ask users to restart an
+otherwise healthy installation just to discover newly installed Python.
+
 ## Install the worker additively
 
 1. Use an existing authorized Linux/DSW instance. New paid instances require an

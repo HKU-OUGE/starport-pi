@@ -24,13 +24,27 @@ jobs:
       - if: runner.os != 'Windows'
         run: npm test
       - if: runner.os == 'Windows'
-        shell: pwsh
+        shell: powershell
         run: '& ./scripts/install.ps1 -InstallPrerequisites:$false -LaunchPanel:$false'
+      - if: runner.os == 'Windows'
+        name: PATH refresh on Windows PowerShell 5.1
+        shell: powershell
+        run: '& ./tests/windows-install.test.ps1'
+      - if: runner.os == 'Windows'
+        name: PATH refresh on PowerShell 7
+        shell: pwsh
+        run: '& ./tests/windows-install.test.ps1'
+      - if: runner.os == 'Windows'
+        name: Uninstall ownership and retained state
+        shell: powershell
+        run: '& ./tests/windows-uninstall.test.ps1'
       - if: runner.os == 'Windows'
         shell: cmd
         run: starport-pi.cmd --version
-      - if: runner.os == 'Linux'
-        run: npm run test:server
+      - run: npm run test:server
+      - if: runner.os != 'Linux'
+        name: Python discovery skips Linux-only worker tests
+        run: python -m unittest discover -s tests -p 'test_*.py'
       - run: python scripts/audit_source.py
       - if: runner.os == 'Windows'
         shell: pwsh

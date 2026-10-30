@@ -7,8 +7,16 @@ import os
 import pathlib
 import tarfile
 import tempfile
+import sys
 import unittest
 from unittest.mock import patch
+
+if sys.platform != 'linux':
+    reason = 'Linux worker tests require fcntl, sched_getaffinity and Linux file-descriptor semantics.'
+    if __name__ == '__main__':
+        print('SKIP: ' + reason)
+        sys.exit(0)
+    raise unittest.SkipTest(reason)
 
 BASE=pathlib.Path(__file__).resolve().parents[1]
 def module(name,file):

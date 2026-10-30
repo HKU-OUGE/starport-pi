@@ -121,6 +121,8 @@ node bin/starport-cloudflare.mjs status path/to/private-enrollment.json
 
 Windows 提供目前使用者的登入啟動工作，不需要儲存系統密碼：
 
+安裝器預設不註冊。使用安裝 Skill 時，Agent 會先詢問；只有明確同意才執行下列註冊命令。
+
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\register-panel.ps1
 # 移除本設定檔的啟動工作
@@ -132,3 +134,14 @@ powershell -ExecutionPolicy Bypass -File .\scripts\register-panel.ps1 -Remove
 代理故障不回退直連；重新連接不會取消訓練。Token 過期、SSH 金鑰更改或 VPC 路徑不可達，仍需在管理頁修正對應設定。
 
 官方依據：[Tunnel API](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/get-started/create-remote-tunnel-api/)、[Access 政策](https://developers.cloudflare.com/cloudflare-one/access-controls/policies/)、[JWT 驗證](https://developers.cloudflare.com/cloudflare-one/access-controls/applications/http-apps/authorization-cookie/validating-json/)。
+
+## 停用與卸載
+
+```powershell
+# 只顯示本設定檔的處理計畫
+powershell -ExecutionPolicy Bypass -File .\scripts\uninstall.ps1
+# 停用登入啟動，停止確認屬於本設定檔的本機程序
+powershell -ExecutionPolicy Bypass -File .\scripts\uninstall.ps1 -Apply
+```
+
+預設保留倉庫、設定、憑證、會話、Cloudflare 資源與遠端 worker。停用本機代理會中斷依賴它的任務外網連線；不會替你取消遠端訓練。刪除資料或移除雲端資源須另行指定，流程見[卸載 Skill](../skills/starport-uninstall/SKILL.md)。
