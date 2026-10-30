@@ -182,10 +182,49 @@ test("HTTP panel rejects unauthenticated and cross-origin writes; streams verifi
       400,
     );
     const row = await (
-        await post("sessions", { title: "Project Atlas", server: "alpha" })
+        await post("sessions", {
+          title: "Project Atlas",
+          server: "alpha",
+          project: "Research",
+        })
       ).json(),
       id = row.id;
     assert.equal(id.length, 32);
+    assert.equal(store.get(id).project, "Research");
+    assert.equal(
+      (
+        await post("sessions/" + id + "/metadata", {
+          title: "Renamed",
+          project: "Evaluation",
+        })
+      ).status,
+      200,
+    );
+    assert.equal(
+      (
+        await post(
+          "sessions/" + id + "/metadata",
+          { archived: true },
+          { ...head, "X-Starport-CSRF": "invalid" },
+        )
+      ).status,
+      400,
+    );
+    assert.equal(
+      (await post("sessions/" + id + "/metadata", { archived: true })).status,
+      200,
+    );
+    assert.equal(store.list().find((s) => s.id === id).title, "Renamed");
+    assert.ok(store.get(id).archivedAt);
+    const denied = await post("sessions/" + id + "/send", {
+      text: "hello",
+      requestId: "a".repeat(32),
+    });
+    assert.equal((await denied.json()).error, "session_archived_restore_first");
+    assert.equal(
+      (await post("sessions/" + id + "/metadata", { archived: false })).status,
+      200,
+    );
     const data = crypto.randomBytes(1500000),
       sha256 = crypto.createHash("sha256").update(data).digest("hex");
     const grant = await (
@@ -301,7 +340,193 @@ test("HTTP panel rejects unauthenticated and cross-origin writes; streams verifi
       200,
     ); // operation is asynchronous
     await app.store.refresh();
+    assert.equal((await post("sessions/" + id + "/delete", {})).status, 400);
+    store
+      .get(id)
+      .jobs.push({ id: "live", status: "completed", released: false });
+    assert.equal(
+      (await post("sessions/" + id + "/delete", { confirmId: id })).status,
+      409,
+    );
+    store.get(id).jobs[0].released = true;
+    const removed = await post("sessions/" + id + "/delete", { confirmId: id });
+    assert.deepEqual(await removed.json(), {
+      deleted: true,
+      cleanupPending: false,
+    });
+    assert.equal((await fetch(ownedUrl, { headers: head })).status, 404);
+    assert.ok(store.get(other.id));
+    assert.equal(
+      (await post("sessions/" + id + "/delete", { confirmId: id })).status,
+      200,
+    );
   } finally {
+    await app?.close();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("session organization survives restart; delete guards active work and removes only owned local history", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "starport-organize-"));
+  let store = new PanelStore(root);
+  try {
+    const a = await store.create({ title: "First", project: "Physics" });
+    const b = await store.create({ title: "Other" });
+    delete b.project;
+    delete b.archivedAt;
+    a.messages.push({
+      id: "0",
+      role: "assistant",
+      content: [{ type: "text", text: "Keep history" }],
+      rev: 1,
+    });
+    const workspace = a.workspace;
+    store.metadata(a.id, {
+      title: "First updated",
+      project: "Research",
+      archived: true,
+    });
+    assert.equal(store.get(a.id).workspace, workspace);
+    assert.throws(
+      () =>
+        store.metadata(a.id, {
+          title: "Should not change",
+          project: "bad\nname",
+        }),
+      /invalid_project_name/,
+    );
+    assert.equal(store.get(a.id).title, "First updated");
+    await store.close();
+    store = new PanelStore(root);
+    assert.equal(store.get(b.id).project, "");
+    assert.equal(store.get(b.id).archivedAt, null);
+    assert.equal(store.get(a.id).project, "Research");
+    assert.ok(store.get(a.id).archivedAt);
+    assert.equal(
+      store.delta(a.id, 0, "old").messages[0].content[0].text,
+      "Keep history",
+    );
+    store.metadata(a.id, { archived: false });
+    const row = store.get(a.id);
+    row.status = "thinking";
+    assert.throws(
+      () => store.remove(a.id, { confirmId: a.id }),
+      /session_busy/,
+    );
+    store.metadata(a.id, { archived: true });
+    assert.equal(row.status, "thinking");
+    row.status = "idle";
+    row.jobs.push({ id: "running", released: false });
+    assert.throws(
+      () => store.remove(a.id, { confirmId: a.id }),
+      /session_jobs_busy/,
+    );
+    row.jobs[0].released = true;
+    const dirs = [
+      path.join(root, "attachments", a.id),
+      path.join(root, "sessions", "__chat__-" + workspace),
+    ];
+    for (const d of dirs) {
+      fs.mkdirSync(d, { recursive: true });
+      fs.writeFileSync(path.join(d, "record"), "owned");
+    }
+    const otherFile = path.join(root, "attachments", b.id, "record");
+    fs.mkdirSync(path.dirname(otherFile), { recursive: true });
+    fs.writeFileSync(otherFile, "other");
+    const original = store.purge;
+    store.purge = () => false;
+    assert.deepEqual(store.remove(a.id, { confirmId: a.id }), {
+      deleted: true,
+      cleanupPending: true,
+    });
+    assert.throws(() => store.get(a.id), /session_not_found/);
+    assert.ok(!fs.readFileSync(store.file, "utf8").includes("Keep history"));
+    store.purge = original;
+    await store.close();
+    store = new PanelStore(root);
+    assert.ok(dirs.every((d) => !fs.existsSync(d)));
+    assert.equal(fs.readFileSync(otherFile, "utf8"), "other");
+    assert.deepEqual(
+      store.list().map((s) => s.id),
+      [b.id],
+    );
+  } finally {
+    await store.close();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("session deletion cannot race an active remote file request", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "starport-delete-race-"));
+  const c = load(root);
+  c.servers.alpha = {
+    mode: "ssh",
+    host: "worker.example.invalid",
+    initialized: true,
+  };
+  save(c, root);
+  let release, entered;
+  const blocked = new Promise((resolve) => {
+    release = resolve;
+  });
+  const started = new Promise((resolve) => {
+    entered = resolve;
+  });
+  const calls = [];
+  const store = new PanelStore(root, {
+    remoteFactory: () => ({
+      call: async (op) => {
+        calls.push(op);
+        if (op === "health") return { ready: true };
+        if (op === "workspace.create") return { id: "a".repeat(32) };
+        if (op === "file.list") {
+          entered();
+          await blocked;
+          return { entries: [] };
+        }
+        throw new Error("unexpected_operation");
+      },
+    }),
+  });
+  let app;
+  try {
+    const r = await store.create({ title: "Reading files", server: "alpha" });
+    app = await startPanel(root, {
+      port: 0,
+      store,
+      useModelProxy: false,
+      maintenance: false,
+    });
+    const base = "http://127.0.0.1:" + app.port;
+    const head = { Origin: base, "Content-Type": "application/json" };
+    const sign = await fetch(base + "/api/login", {
+      method: "POST",
+      headers: head,
+      body: JSON.stringify({ key: app.key }),
+    });
+    head.Cookie = sign.headers.get("set-cookie").split(";")[0];
+    head["X-Starport-CSRF"] = (
+      await (await fetch(base + "/api/bootstrap", { headers: head })).json()
+    ).csrf;
+    const files = fetch(base + "/api/sessions/" + r.id + "/files", {
+      headers: head,
+    });
+    await started;
+    const remove = () =>
+      fetch(base + "/api/sessions/" + r.id + "/delete", {
+        method: "POST",
+        headers: head,
+        body: JSON.stringify({ confirmId: r.id }),
+      });
+    const refused = await remove();
+    assert.equal(refused.status, 409);
+    assert.equal((await refused.json()).error, "session_transfers_busy");
+    release();
+    assert.equal((await files).status, 200);
+    assert.equal((await remove()).status, 200);
+    assert.ok(!calls.some((op) => /cancel|delete/.test(op)));
+  } finally {
+    release();
     await app?.close();
     fs.rmSync(root, { recursive: true, force: true });
   }

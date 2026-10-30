@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef, lazy, Suspense } from "react";
 import { createRoot } from "react-dom/client";
 import SessionFeatures from "./SessionFeatures";
+import SessionList from "./SessionList";
+import SessionManager from "./SessionManager";
 import SlashMenu from "./SlashMenu";
 import AttachmentCard from "./AttachmentCard";
 import PreviewBoundary from "./PreviewBoundary";
@@ -245,7 +247,12 @@ function App() {
     [guide, G] = useState(false),
     [newOpen, New] = useState(false),
     [title, Title] = useState(""),
-    [server, Server] = useState("__chat__");
+    [server, Server] = useState("__chat__"),
+    [project, Project] = useState(""),
+    [manageId, Manage] = useState(""),
+    [settingsOpen, SettingsOpen] = useState(false),
+    [toolsOpen, ToolsOpen] = useState(false),
+    [notice, Notice] = useState("");
   const [views, V] = useState({}),
     [message, M] = useState(""),
     [sending, Send] = useState(false),
@@ -295,9 +302,53 @@ function App() {
       clearInterval(clock);
     };
   }, []);
-  const current =
-      views[active]?.session || boot?.sessions.find((s) => s.id === active),
-    rows = views[active]?.rows || [];
+  const listed = boot?.sessions.find((s) => s.id === active),
+    viewed = views[active]?.session,
+    current = listed && (viewed?.rev > listed.rev ? viewed : listed),
+    rows = views[active]?.rows || [],
+    projects = [
+      ...new Set((boot?.sessions || []).map((s) => s.project).filter(Boolean)),
+    ].sort(),
+    managed = boot?.sessions.find((s) => s.id === manageId);
+  const revealSettings = (tools = false) => {
+    SettingsOpen(true);
+    if (tools) ToolsOpen(true);
+  };
+  const sessionChanged = (id, result) => {
+    if (result.deleted) {
+      if (active === id) choose("");
+      const next = { ...viewsRef.current };
+      delete next[id];
+      delete cursors.current[id];
+      viewsRef.current = next;
+      V(next);
+      S((old) => ({
+        ...old,
+        sessions: old.sessions.filter((s) => s.id !== id),
+      }));
+      if (result.cleanupPending)
+        Notice("会话已删除；部分缓存正在被占用，下次启动面板时继续清理。");
+    } else {
+      S((old) => ({
+        ...old,
+        sessions: old.sessions.map((s) =>
+          s.id === id ? { ...s, ...result } : s,
+        ),
+      }));
+      if (viewsRef.current[id]) {
+        const next = {
+          ...viewsRef.current,
+          [id]: {
+            ...viewsRef.current[id],
+            session: { ...viewsRef.current[id].session, ...result },
+          },
+        };
+        viewsRef.current = next;
+        V(next);
+      }
+    }
+    refresh();
+  };
   useEffect(() => {
     Model(current?.model || "");
     Effort(current?.effort || "high");
@@ -444,6 +495,8 @@ function App() {
   }, [active, job, tab]);
   const choose = (id) => {
     A(id);
+    SettingsOpen(false);
+    ToolsOpen(false);
     Menu(false);
     T("conversation");
     Path(".");
@@ -636,28 +689,12 @@ function App() {
               <Icon name="plus" />
               新增会话
             </button>
-            <div className="sidebar-label">会话</div>
-            <nav>
-              {boot.sessions.map((s) => (
-                <button
-                  className={"session " + (active === s.id ? "active" : "")}
-                  key={s.id}
-                  onClick={() => choose(s.id)}
-                >
-                  <Icon name="folder" />
-                  <span>
-                    {s.title}
-                    <small>
-                      {["thinking", "tool"].includes(s.status)
-                        ? label(s.status)
-                        : s.mode === "chat"
-                          ? "纯聊天"
-                          : s.server}
-                    </small>
-                  </span>
-                </button>
-              ))}
-            </nav>
+            <SessionList
+              sessions={boot.sessions}
+              active={active}
+              onSelect={choose}
+              onManage={Manage}
+            />
             <button
               className="sidebar-bottom"
               onClick={() => {
@@ -683,8 +720,19 @@ function App() {
               <>
                 <div className="view-heading">
                   <div>
-                    <h1>{current.title}</h1>
+                    <div className="conversation-title">
+                      <h1>{current.title}</h1>
+                      <button
+                        className="icon"
+                        aria-label="管理当前会话"
+                        title="管理会话"
+                        onClick={() => Manage(active)}
+                      >
+                        ⋯
+                      </button>
+                    </div>
                     <p>
+                      {current.project && <span>{current.project} · </span>}
                       {current.mode === "chat"
                         ? "纯聊天"
                         : boot.serverKinds?.[current.server] === "wsl"
@@ -755,65 +803,93 @@ function App() {
                 )}
                 {tab === "conversation" && (
                   <>
-                    <form
-                      className="modelbar"
-                      onSubmit={async (e) => {
-                        e.preventDefault();
-                        try {
-                          await api("sessions/" + active + "/settings", {
-                            model,
-                            effort,
-                            features,
-                          });
-                          refresh();
-                        } catch (e) {
-                          E(e.message);
-                        }
-                      }}
+                    <details
+                      className="conversation-settings"
+                      open={settingsOpen}
+                      onToggle={(e) => SettingsOpen(e.currentTarget.open)}
                     >
-                      <label>
-                        模型
-                        <select
-                          aria-label="模型"
-                          value={model}
-                          onChange={(e) => Model(e.target.value)}
-                          disabled={working}
+                      <summary>
+                        <Icon name="settings" />
+                        <span>
+                          {boot.models.find((m) => m.id === current.model)
+                            ?.name || current.model}{" "}
+                          · {current.effort}
+                        </span>
+                        <span className="settings-toggle">
+                          {settingsOpen ? "收起" : "设置"}
+                        </span>
+                      </summary>
+                      <form
+                        className="modelbar"
+                        onSubmit={async (e) => {
+                          e.preventDefault();
+                          try {
+                            const result = await api(
+                              "sessions/" + active + "/settings",
+                              {
+                                model,
+                                effort,
+                                features,
+                              },
+                            );
+                            sessionChanged(active, result);
+                            SettingsOpen(false);
+                          } catch (e) {
+                            E(e.message);
+                          }
+                        }}
+                      >
+                        <label>
+                          模型
+                          <select
+                            aria-label="模型"
+                            value={model}
+                            onChange={(e) => Model(e.target.value)}
+                            disabled={working || Boolean(current.archivedAt)}
+                          >
+                            {(boot.models || []).map((m) => (
+                              <option value={m.id} key={m.id}>
+                                {m.name}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label>
+                          Effort
+                          <select
+                            aria-label="Effort"
+                            value={effort}
+                            onChange={(e) => Effort(e.target.value)}
+                            disabled={working || Boolean(current.archivedAt)}
+                          >
+                            {[
+                              "off",
+                              "minimal",
+                              "low",
+                              "medium",
+                              "high",
+                              "xhigh",
+                              "max",
+                            ].map((x) => (
+                              <option key={x}>{x}</option>
+                            ))}
+                          </select>
+                        </label>
+                        <SessionFeatures
+                          open={toolsOpen}
+                          onToggle={ToolsOpen}
+                          value={features}
+                          onChange={Features}
+                          addons={boot.addons}
+                          disabled={working || Boolean(current.archivedAt)}
+                        />
+                        <button
+                          disabled={working || Boolean(current.archivedAt)}
                         >
-                          {(boot.models || []).map((m) => (
-                            <option value={m.id} key={m.id}>
-                              {m.name}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <label>
-                        Effort
-                        <select
-                          value={effort}
-                          onChange={(e) => Effort(e.target.value)}
-                          disabled={working}
-                        >
-                          {[
-                            "off",
-                            "minimal",
-                            "low",
-                            "medium",
-                            "high",
-                            "xhigh",
-                            "max",
-                          ].map((x) => (
-                            <option key={x}>{x}</option>
-                          ))}
-                        </select>
-                      </label>
-                      <SessionFeatures
-                        value={features}
-                        onChange={Features}
-                        addons={boot.addons}
-                        disabled={working}
-                      />
-                      <button disabled={working}>应用</button>
-                    </form>
+                          应用
+                        </button>
+                      </form>
+                    </details>
                     <div className="messages">
                       {rows.map((row) => (
                         <PreviewBoundary key={row.id}>
@@ -833,152 +909,168 @@ function App() {
                       )}
                       <div ref={end} />
                     </div>
-                    <form className="composer" onSubmit={send}>
-                      {!slashHidden && /^\/[^\s]*$/.test(message) && (
-                        <SlashMenu
-                          query={message}
-                          addons={boot.addons}
-                          mode={current.mode}
-                          onDismiss={() => SlashHidden(true)}
-                          onSelect={async (x) => {
-                            M("");
-                            SlashHidden(true);
-                            if (x.kind === "command") {
-                              if (x.id === "help") {
-                                G(true);
-                                SetupView(true);
-                              } else if (x.id === "new") New(true);
-                              else if (x.id === "stop") {
-                                try {
-                                  await api("sessions/" + active + "/stop", {});
-                                } catch (e) {
-                                  E(e.message);
-                                }
-                              } else if (["model", "tools"].includes(x.id)) {
-                                document
-                                  .querySelector(".session-features")
-                                  ?.setAttribute("open", "");
-                                document
-                                  .querySelector(".modelbar")
-                                  ?.scrollIntoView({ block: "nearest" });
-                              } else T(x.id === "jobs" ? "tasks" : x.id);
-                            } else if (
-                              ["skills", "plugins", "mcp"].includes(x.kind)
-                            ) {
-                              const next = {
-                                ...features,
-                                [x.kind]: [
-                                  ...new Set([
-                                    ...(features[x.kind] || []),
-                                    x.member,
-                                  ]),
-                                ],
-                              };
-                              Features(next);
-                              document
-                                .querySelector(".session-features")
-                                ?.setAttribute("open", "");
-                            } else if (x.kind === "native") {
-                              const k = {
-                                web_search: "webSearch",
-                                web_fetch: "webFetch",
-                                code_execution: "codeExecution",
-                              }[x.id];
-                              Features({ ...features, [k]: true });
-                              document
-                                .querySelector(".session-features")
-                                ?.setAttribute("open", "");
-                            } else M("Please use " + x.id + " to ");
+                    {current.archivedAt ? (
+                      <div className="archived-banner">
+                        <span>此会话已归档</span>
+                        <button
+                          onClick={async () => {
+                            try {
+                              sessionChanged(
+                                active,
+                                await api("sessions/" + active + "/metadata", {
+                                  archived: false,
+                                }),
+                              );
+                            } catch (e) {
+                              E(e.message);
+                            }
+                          }}
+                        >
+                          恢复并继续
+                        </button>
+                      </div>
+                    ) : (
+                      <form className="composer" onSubmit={send}>
+                        {!slashHidden && /^\/[^\s]*$/.test(message) && (
+                          <SlashMenu
+                            query={message}
+                            addons={boot.addons}
+                            mode={current.mode}
+                            onDismiss={() => SlashHidden(true)}
+                            onSelect={async (x) => {
+                              M("");
+                              SlashHidden(true);
+                              if (x.kind === "command") {
+                                if (x.id === "help") {
+                                  G(true);
+                                  SetupView(true);
+                                } else if (x.id === "new") New(true);
+                                else if (x.id === "stop") {
+                                  try {
+                                    await api(
+                                      "sessions/" + active + "/stop",
+                                      {},
+                                    );
+                                  } catch (e) {
+                                    E(e.message);
+                                  }
+                                } else if (["model", "tools"].includes(x.id)) {
+                                  revealSettings(x.id === "tools");
+                                } else T(x.id === "jobs" ? "tasks" : x.id);
+                              } else if (
+                                ["skills", "plugins", "mcp"].includes(x.kind)
+                              ) {
+                                const next = {
+                                  ...features,
+                                  [x.kind]: [
+                                    ...new Set([
+                                      ...(features[x.kind] || []),
+                                      x.member,
+                                    ]),
+                                  ],
+                                };
+                                Features(next);
+                                revealSettings(true);
+                              } else if (x.kind === "native") {
+                                const k = {
+                                  web_search: "webSearch",
+                                  web_fetch: "webFetch",
+                                  code_execution: "codeExecution",
+                                }[x.id];
+                                Features({ ...features, [k]: true });
+                                revealSettings(true);
+                              } else M("Please use " + x.id + " to ");
+                            }}
+                          />
+                        )}
+                        {attached.length > 0 && (
+                          <div className="attached-list">
+                            {attached.map((x) => (
+                              <span key={x.id}>
+                                {x.name}
+                                <button
+                                  type="button"
+                                  aria-label={"移除 " + x.name}
+                                  onClick={() =>
+                                    Attached((xs) =>
+                                      xs.filter((i) => i.id !== x.id),
+                                    )
+                                  }
+                                >
+                                  ×
+                                </button>
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                        <input
+                          hidden
+                          ref={fileInput}
+                          type="file"
+                          multiple
+                          onChange={async (e) => {
+                            const files = [...e.target.files];
+                            e.target.value = "";
+                            for (const file of files) await upload(file, true);
                           }}
                         />
-                      )}
-                      {attached.length > 0 && (
-                        <div className="attached-list">
-                          {attached.map((x) => (
-                            <span key={x.id}>
-                              {x.name}
-                              <button
-                                type="button"
-                                aria-label={"移除 " + x.name}
-                                onClick={() =>
-                                  Attached((xs) =>
-                                    xs.filter((i) => i.id !== x.id),
-                                  )
-                                }
-                              >
-                                ×
-                              </button>
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                      <input
-                        hidden
-                        ref={fileInput}
-                        type="file"
-                        multiple
-                        onChange={async (e) => {
-                          const files = [...e.target.files];
-                          e.target.value = "";
-                          for (const file of files) await upload(file, true);
-                        }}
-                      />
-                      <button
-                        type="button"
-                        className="attach"
-                        aria-label="附加"
-                        disabled={Boolean(uploading) || working}
-                        onClick={() => fileInput.current.click()}
-                      >
-                        <Icon name="clip" />
-                        <span>附加</span>
-                      </button>
-                      <textarea
-                        aria-label="消息"
-                        placeholder="发送消息…"
-                        value={message}
-                        onChange={(e) => {
-                          M(e.target.value);
-                          SlashHidden(false);
-                          requestId.current = null;
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
-                            e.preventDefault();
-                            send(e);
-                          }
-                        }}
-                        rows="2"
-                      />
-                      {working ? (
                         <button
                           type="button"
-                          onClick={() =>
-                            api("sessions/" + active + "/stop", {}).catch((e) =>
-                              E(e.message),
-                            )
-                          }
+                          className="attach"
+                          aria-label="附加"
+                          disabled={Boolean(uploading) || working}
+                          onClick={() => fileInput.current.click()}
                         >
-                          停止回复
+                          <Icon name="clip" />
+                          <span>附加</span>
                         </button>
-                      ) : (
-                        <button
-                          className="primary"
-                          aria-label="发送"
-                          disabled={
-                            sending || !message.trim() || Boolean(uploading)
-                          }
-                        >
-                          <Icon name="send" />
-                          <span>发送</span>
-                        </button>
-                      )}
-                      {uploading && (
-                        <small className="upload-progress" role="status">
-                          {uploading}
-                        </small>
-                      )}
-                    </form>
+                        <textarea
+                          aria-label="消息"
+                          placeholder="发送消息…"
+                          value={message}
+                          onChange={(e) => {
+                            M(e.target.value);
+                            SlashHidden(false);
+                            requestId.current = null;
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+                              e.preventDefault();
+                              send(e);
+                            }
+                          }}
+                          rows="2"
+                        />
+                        {working ? (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              api("sessions/" + active + "/stop", {}).catch(
+                                (e) => E(e.message),
+                              )
+                            }
+                          >
+                            停止回复
+                          </button>
+                        ) : (
+                          <button
+                            className="primary"
+                            aria-label="发送"
+                            disabled={
+                              sending || !message.trim() || Boolean(uploading)
+                            }
+                          >
+                            <Icon name="send" />
+                            <span>发送</span>
+                          </button>
+                        )}
+                        {uploading && (
+                          <small className="upload-progress" role="status">
+                            {uploading}
+                          </small>
+                        )}
+                      </form>
+                    )}
                   </>
                 )}
                 {tab === "tasks" && (
@@ -1189,6 +1281,21 @@ function App() {
           </aside>
         </div>
       )}
+      {notice && (
+        <div className="notice" role="status">
+          {notice}
+          <button onClick={() => Notice("")}>关闭</button>
+        </div>
+      )}
+      {managed && (
+        <SessionManager
+          key={managed.id}
+          session={managed}
+          projects={projects}
+          onClose={() => Manage("")}
+          onChange={sessionChanged}
+        />
+      )}
       {newOpen && (
         <div className="modal-backdrop">
           <form
@@ -1196,10 +1303,11 @@ function App() {
             onSubmit={async (e) => {
               e.preventDefault();
               try {
-                const s = await api("sessions", { title, server });
+                const s = await api("sessions", { title, server, project });
                 await refresh();
                 choose(s.id);
                 Title("");
+                Project("");
                 New(false);
               } catch (e) {
                 E(e.message);
@@ -1208,7 +1316,7 @@ function App() {
           >
             <h2>新增会话</h2>
             <label className="field">
-              项目名称
+              会话名称
               <input
                 autoFocus
                 value={title}
@@ -1216,6 +1324,21 @@ function App() {
                 required
                 maxLength="100"
               />
+            </label>
+            <label className="field">
+              项目
+              <input
+                list="new-projects"
+                value={project}
+                onChange={(e) => Project(e.target.value)}
+                placeholder="选择或输入项目，留空则不分组"
+                maxLength="80"
+              />
+              <datalist id="new-projects">
+                {projects.map((p) => (
+                  <option key={p} value={p} />
+                ))}
+              </datalist>
             </label>
             <label className="field">
               执行环境

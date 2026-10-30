@@ -121,9 +121,11 @@ export async function startPanel(
     ? JSON.parse(fs.readFileSync(uploadsFile, "utf8"))
     : {};
   const persist = () => writePrivate(uploadsFile, uploads);
+  const sessionRequests = new Map();
   let loginFailures = 0,
     loginWindow = Date.now();
   const server = http.createServer(async (req, res) => {
+    let requestSession;
     res.setHeader("Cache-Control", "no-store");
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("Referrer-Policy", "no-referrer");
@@ -260,11 +262,28 @@ export async function startPanel(
         return;
       }
       const match = p.match(
-        /^\/api\/sessions\/([a-f0-9]{32})\/(messages|send|stop|settings|files|upload-begin|upload-chunk|upload-finish|logs|artifacts|cancel|download|attachments|attach-begin|attach-chunk|attach-finish|attachment|cloud-file|cloud-file-meta)$/,
+        /^\/api\/sessions\/([a-f0-9]{32})\/(messages|send|stop|settings|metadata|delete|files|upload-begin|upload-chunk|upload-finish|logs|artifacts|cancel|download|attachments|attach-begin|attach-chunk|attach-finish|attachment|cloud-file|cloud-file-meta)$/,
       );
       if (!match) throw new Error("route_not_found");
-      const [, id, op] = match,
-        r = db.get(id);
+      const [, id, op] = match;
+      requestSession = id;
+      sessionRequests.set(id, (sessionRequests.get(id) || 0) + 1);
+      if (op === "delete" && req.method === "POST") {
+        const input = await body(req, 1024);
+        if (sessionRequests.get(id) > 1)
+          throw new Error("session_transfers_busy");
+        const result = db.remove(id, input);
+        for (const [key, upload] of Object.entries(uploads))
+          if (upload.session === id) delete uploads[key];
+        persist();
+        send(result);
+        return;
+      }
+      const r = db.get(id);
+      if (op === "metadata" && req.method === "POST") {
+        send(db.metadata(id, await body(req, 8192)));
+        return;
+      }
       if (op === "messages" && req.method === "GET") {
         const cursor = Number(url.searchParams.get("cursor") || 0);
         send(
@@ -583,6 +602,12 @@ export async function startPanel(
       json(req, res, status, {
         error: status === 401 ? "authentication_required" : error,
       });
+    } finally {
+      if (requestSession) {
+        const remaining = sessionRequests.get(requestSession) - 1;
+        if (remaining) sessionRequests.set(requestSession, remaining);
+        else sessionRequests.delete(requestSession);
+      }
     }
   });
   server.requestTimeout = 120000;

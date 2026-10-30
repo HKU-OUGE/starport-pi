@@ -892,6 +892,17 @@ export default function Setup({ onClose, onChange, guideOnly = false }) {
       )}
       {tab === "guide" && (
         <article className="card guide">
+          <h2>管理会话</h2>
+          <p>
+            侧栏按项目分组，可搜索并切换最近、已归档或全部。会话旁的 ⋯
+            可重命名、移动项目、归档、恢复或删除。
+            项目分组不合并工作区。归档保留记录且不停止任务；删除需确认，正在回复或任务未释放时不可删除。
+            删除仅清理会话和本机缓存，服务器文件、云端文件及用量记录保留。
+          </p>
+          <p>
+            模型、effort 和工具默认收起。点击设置或输入 /model、/tools
+            展开，应用后自动收起。
+          </p>
           <h2>会话工具与扩展</h2>
           <p>
             输入 /

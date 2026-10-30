@@ -162,3 +162,31 @@ served locally. A stale lazy-loaded bundle during the intentional QA rebuild
 showed a reload action; refreshing restored the panel instead of leaving a blank
 page. Local validation finished with 49 Node tests, 13 Python tests, a production
 build, a clean publication audit and no production npm audit findings.
+
+## Session management and empty tool arguments (0.4.1)
+
+The native collector preserves initial tool input when argument deltas are empty
+or whitespace. Non-empty malformed JSON remains an error. Regression tests cover
+ordinary, hosted and MCP tools, plus the real Pi SDK calling `server_status`
+through deterministic SSE and continuing after its remote health result. No paid
+model requests were sent, and no failed user request was replayed.
+
+Session metadata persists project groups, titles and archive state across
+restart. HTTP tests verify CSRF, archived-send rejection, read-only history access,
+deletion confirmation, active-turn/unreleased-job guards, in-flight file request
+exclusion, and cleanup restricted to the deleted session's local data. Deferred
+cleanup is retried at startup. Remote workspaces and jobs are never deleted or
+cancelled by session management.
+
+An independent loopback fixture was checked at 1280 × 720 and 390 × 844: grouped
+creation, rename/move, search, project folding, archive/reload/restore, deletion
+confirmation and cancellation. Settings collapse to 38 pixels, retain drafts
+when folded, close after applying, and open through `/tools`. Mobile expansion
+keeps the composer visible. Both layouts had no horizontal overflow, framework
+overlay or browser console errors. Permanent deletion was verified through the
+HTTP tests with disposable data, not on user conversations.
+
+Local checks: 53 Node tests, 13 Python tests, production web build and source
+privacy audit passed. These checks do not initialize servers or restart existing
+installations. The build retains the existing size warning for lazy PDF/Markdown
+chunks.

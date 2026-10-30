@@ -15,6 +15,16 @@ import {
 import { toTraditional } from "./chinese.mjs";
 
 const uid = () => crypto.randomBytes(16).toString("hex");
+function sessionName(value, max, empty = false) {
+  if (
+    typeof value !== "string" ||
+    value.length > max ||
+    /[\x00-\x1f\x7f]/.test(value) ||
+    (!empty && !value.trim())
+  )
+    throw new Error(empty ? "invalid_project_name" : "invalid_session_title");
+  return value.trim();
+}
 export const safeError = (e) =>
   /^[a-z0-9_]{1,100}$/.test(e?.message || "") ? e.message : "operation_failed";
 const message = (m) => ({
@@ -64,10 +74,14 @@ export class PanelStore {
       ? JSON.parse(fs.readFileSync(this.file, "utf8"))
       : [];
     for (const r of this.rows) {
+      if (r.deletedAt) continue;
+      r.project ||= "";
+      r.archivedAt ||= null;
       if (r.status === "thinking" || r.status === "tool")
         r.status = "interrupted";
       r.rev = (r.rev || 0) + 1;
     }
+    this.rows = this.rows.filter((r) => !r.deletedAt || !this.purge(r));
     this.save();
     this.refreshing = false;
     this.refresh();
@@ -78,7 +92,7 @@ export class PanelStore {
     writePrivate(this.file, this.rows);
   }
   get(id) {
-    const row = this.rows.find((r) => r.id === id);
+    const row = this.rows.find((r) => r.id === id && !r.deletedAt);
     if (!row) throw new Error("session_not_found");
     return row;
   }
@@ -127,21 +141,24 @@ export class PanelStore {
     this.save();
   }
   list() {
-    return this.rows.map(({ messages, pending, addonRevision, ...r }) => ({
-      ...r,
-      jobs: r.jobs.map(({ command, ...j }) => j),
-    }));
+    return this.rows
+      .filter((r) => !r.deletedAt)
+      .map(({ messages, pending, addonRevision, ...r }) => ({
+        ...r,
+        jobs: r.jobs.map(({ command, ...j }) => j),
+      }));
   }
-  async create({ title, server }) {
-    if (typeof title !== "string" || !title.trim() || title.length > 100)
-      throw new Error("invalid_session_title");
+  async create({ title, server, project = "" }) {
+    title = sessionName(title, 100);
+    project = sessionName(project, 80, true);
     const config = load(this.root);
     const chat = server === "__chat__" || !server;
     if (!chat && !Object.hasOwn(config.servers, server))
       throw new Error("server_not_configured");
     if (!chat && config.servers[server].initialized === false)
       throw new Error("server_initialization_required");
-    if (this.rows.length >= 200) throw new Error("session_limit");
+    if (this.rows.filter((r) => !r.deletedAt).length >= 200)
+      throw new Error("session_limit");
     const remote = chat
         ? null
         : this.remoteFactory({ ...config, activeServer: server }, this.root),
@@ -150,6 +167,8 @@ export class PanelStore {
     const row = {
       id: uid(),
       title: title.trim(),
+      project,
+      archivedAt: null,
       server: chat ? "__chat__" : server,
       mode: chat ? "chat" : "workspace",
       workspace,
@@ -165,6 +184,83 @@ export class PanelStore {
     this.rows.unshift(row);
     this.touch(row);
     return row;
+  }
+  metadata(id, input) {
+    const r = this.get(id);
+    if (
+      !input ||
+      typeof input !== "object" ||
+      Array.isArray(input) ||
+      !Object.keys(input).length ||
+      Object.keys(input).some(
+        (k) => !["title", "project", "archived"].includes(k),
+      )
+    )
+      throw new Error("invalid_session_metadata");
+    const next = {};
+    if (Object.hasOwn(input, "title"))
+      next.title = sessionName(input.title, 100);
+    if (Object.hasOwn(input, "project"))
+      next.project = sessionName(input.project, 80, true);
+    if (Object.hasOwn(input, "archived")) {
+      if (typeof input.archived !== "boolean")
+        throw new Error("invalid_session_metadata");
+      next.archivedAt = input.archived ? r.archivedAt || Date.now() : null;
+    }
+    Object.assign(r, next);
+    this.touch(r);
+    return this.list().find((x) => x.id === id);
+  }
+  purge(r) {
+    try {
+      if (
+        !/^[a-f0-9]{32}$/.test(r.id) ||
+        !/^[a-f0-9]{32}$/.test(r.workspace) ||
+        !(r.server === "__chat__" || /^[a-z][a-z0-9-]{0,39}$/.test(r.server))
+      )
+        throw new Error("invalid_session_storage");
+      for (const [parent, name] of [
+        ["attachments", r.id],
+        ["sessions", r.server + "-" + r.workspace],
+      ]) {
+        const base = privateDir(path.join(this.root, parent));
+        fs.rmSync(path.join(base, name), { recursive: true, force: true });
+      }
+      return true;
+    } catch {
+      return false; // Retry tombstones at startup; never restore deleted messages.
+    }
+  }
+  remove(id, { confirmId } = {}) {
+    if (confirmId !== id)
+      throw new Error("session_delete_confirmation_required");
+    const r = this.rows.find((x) => x.id === id);
+    if (!r) return { deleted: true, cleanupPending: false };
+    if (!r.deletedAt) {
+      if (r.pending || ["thinking", "tool"].includes(r.status))
+        throw new Error("session_busy");
+      if (r.jobs.some((j) => !j.released)) throw new Error("session_jobs_busy");
+      this.live.get(id)?.dispose();
+      this.live.delete(id);
+      // Persist a minimal tombstone before removing local history and attachments.
+      this.rows = this.rows.map((x) =>
+        x.id === id
+          ? {
+              id,
+              server: r.server,
+              workspace: r.workspace,
+              deletedAt: Date.now(),
+            }
+          : x,
+      );
+      this.save();
+    }
+    const cleaned = this.purge(r);
+    if (cleaned) {
+      this.rows = this.rows.filter((x) => x.id !== id);
+      this.save();
+    }
+    return { deleted: true, cleanupPending: !cleaned };
   }
   sync(r, session, partial) {
     const next = session.messages
@@ -240,6 +336,7 @@ export class PanelStore {
   }
   async send(id, { text, requestId, attachments = [] }) {
     const r = this.get(id);
+    if (r.archivedAt) throw new Error("session_archived_restore_first");
     if (typeof requestId !== "string" || !/^[a-f0-9-]{16,64}$/.test(requestId))
       throw new Error("request_id_required");
     if (r.lastRequest === requestId) return { accepted: true, duplicate: true };
@@ -305,6 +402,7 @@ export class PanelStore {
   }
   async settings(id, { model, effort, features: selected }) {
     const r = this.get(id);
+    if (r.archivedAt) throw new Error("session_archived_restore_first");
     if (["thinking", "tool"].includes(r.status))
       throw new Error("session_busy");
     if (
@@ -367,6 +465,7 @@ export class PanelStore {
         }
       }
       for (const row of this.rows) {
+        if (row.deletedAt) continue;
         for (const job of row.jobs.filter((j) => !j.released)) {
           try {
             Object.assign(

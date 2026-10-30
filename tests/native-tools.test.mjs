@@ -24,6 +24,54 @@ import { toTraditional } from "../src/chinese.mjs";
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), "starport-native-"));
 const sha = (b) => crypto.createHash("sha256").update(b).digest("hex");
 
+test("native tool arguments accept empty streams and reject damaged non-empty JSON", () => {
+  for (const type of ["tool_use", "server_tool_use", "mcp_tool_use"]) {
+    for (const chunks of [[], [""], [" ", "\n\t"], ["{", "}"]]) {
+      const c = new NativeCollector();
+      c.event({
+        type: "content_block_start",
+        index: 0,
+        content_block: {
+          type,
+          id: "toolu_status",
+          name: "server_status",
+          input: {},
+        },
+      });
+      for (const partial_json of chunks)
+        c.event({
+          type: "content_block_delta",
+          index: 0,
+          delta: { type: "input_json_delta", partial_json },
+        });
+      c.event({ type: "content_block_stop", index: 0 });
+      assert.deepEqual(c.blocks[0].input, {});
+    }
+  }
+  const c = new NativeCollector();
+  c.event({
+    type: "content_block_start",
+    index: 0,
+    content_block: { type: "tool_use", input: { existing: "keep" } },
+  });
+  c.event({
+    type: "content_block_delta",
+    index: 0,
+    delta: { type: "input_json_delta", partial_json: " " },
+  });
+  c.event({ type: "content_block_stop", index: 0 });
+  assert.deepEqual(c.blocks[0].input, { existing: "keep" });
+  c.event({
+    type: "content_block_delta",
+    index: 0,
+    delta: { type: "input_json_delta", partial_json: '{"broken":' },
+  });
+  assert.throws(
+    () => c.event({ type: "content_block_stop", index: 0 }),
+    /invalid_native_tool_stream/,
+  );
+});
+
 test("Files API uses multipart on the fixed API transport and reuses uploaded Office files", async () => {
   const root = tmp(),
     old = getGlobalDispatcher(),
@@ -127,6 +175,100 @@ function sse(id, blocks, stop = "end_turn") {
     .map((e) => `event: ${e.type}\ndata: ${JSON.stringify(e)}\n\n`)
     .join("");
 }
+
+test("actual SDK completes parameterless server_status after empty argument deltas", async () => {
+  const root = tmp(),
+    previous = getGlobalDispatcher(),
+    net = new MockAgent();
+  net.disableNetConnect();
+  setGlobalDispatcher(net);
+  let session;
+  try {
+    const runtime = await ModelRuntime.create({
+      authPath: path.join(root, "auth.json"),
+      modelsPath: null,
+      allowModelNetwork: false,
+      refreshOnCreate: false,
+    });
+    await runtime.setRuntimeApiKey("anthropic", "example-test-key");
+    for (const partial_json of ["", " \n\t", "{}"]) {
+      const requests = [],
+        calls = [];
+      const delta = {
+        type: "content_block_delta",
+        index: 0,
+        delta: { type: "input_json_delta", partial_json },
+      };
+      const first = sse(
+        "msg_status",
+        [
+          {
+            type: "tool_use",
+            id: "toolu_status",
+            name: "server_status",
+            input: {},
+          },
+        ],
+        "tool_use",
+      ).replace(
+        "event: content_block_stop",
+        `event: content_block_delta\ndata: ${JSON.stringify(delta)}\n\nevent: content_block_stop`,
+      );
+      for (const data of [
+        first,
+        sse("msg_done", [{ type: "text", text: "Server ready." }]),
+      ])
+        net
+          .get("https://api.anthropic.com")
+          .intercept({ path: /\/v1\/messages.*/, method: "POST" })
+          .reply((opts) => {
+            requests.push(JSON.parse(opts.body));
+            return {
+              statusCode: 200,
+              data,
+              responseOptions: {
+                headers: { "content-type": "text/event-stream" },
+              },
+            };
+          });
+      session = (
+        await makeSession(
+          {
+            activeServer: "alpha",
+            workspace: "a".repeat(32),
+            model: "claude-sonnet-5-5",
+            effort: "off",
+          },
+          root,
+          {
+            call: async (op) => {
+              calls.push(op);
+              return { ready: true, cpus: 4, memory_gib: 8, gpus: 1 };
+            },
+          },
+          { modelRuntime: runtime, inMemory: true },
+        )
+      ).session;
+      await session.prompt("Check server status.");
+      assert.deepEqual(calls, ["health"]);
+      assert.equal(requests.length, 2);
+      assert.equal(session.messages.at(-1).stopReason, "stop");
+      assert.ok(
+        requests[1].messages.some((m) =>
+          m.content?.some((b) => b.type === "tool_result"),
+        ),
+      );
+      session.dispose();
+      session = null;
+    }
+    net.assertNoPendingInterceptors();
+  } finally {
+    session?.dispose();
+    setGlobalDispatcher(previous);
+    await net.close();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
 
 test("actual SDK replays hosted tools and citations across pause, next prompt and disk reload", async () => {
   const root = tmp(),

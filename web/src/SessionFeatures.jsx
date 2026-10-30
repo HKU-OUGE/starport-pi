@@ -1,8 +1,19 @@
 import React from "react";
-export default function SessionFeatures({ value, onChange, addons, disabled }) {
+export default function SessionFeatures({
+  value,
+  onChange,
+  addons,
+  disabled,
+  open,
+  onToggle,
+}) {
   const set = (k, v) => onChange({ ...value, [k]: v });
   return (
-    <details className="session-features">
+    <details
+      className="session-features"
+      open={open}
+      onToggle={(e) => onToggle(e.currentTarget.open)}
+    >
       <summary>
         工具与偏好{" "}
         <span className="badge">

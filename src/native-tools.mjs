@@ -122,7 +122,10 @@ export class NativeCollector {
     }
     if (e.type === "content_block_stop" && this.json.has(e.index)) {
       try {
-        this.blocks[e.index].input = JSON.parse(this.json.get(e.index));
+        const input = this.json.get(e.index);
+        // A parameterless tool may emit an empty delta instead of "{}".
+        // Keep its initial input; malformed non-empty JSON must still fail.
+        if (input.trim()) this.blocks[e.index].input = JSON.parse(input);
       } catch {
         throw new Error("invalid_native_tool_stream");
       }
