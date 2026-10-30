@@ -38,6 +38,7 @@ import {
 } from "./profile-transfer.mjs";
 import { installLocal } from "./install-local.mjs";
 import { closeLocalBridges } from "./local-bridge.mjs";
+import { Addons } from "./addons.mjs";
 
 export function parseSshCommand(value) {
   if (
@@ -239,6 +240,11 @@ export class Setup {
     return { operation: op.id };
   }
   async dispatch(action, input = {}) {
+    if (action === "addons-list") return new Addons(this.root).list();
+    if (action === "addons-save")
+      return new Addons(this.root).save(input.kind, input.item);
+    if (action === "addons-remove")
+      return new Addons(this.root).remove(input.kind, input.id);
     const c = load(this.root);
     if (action === "state")
       return {

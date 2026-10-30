@@ -21,16 +21,23 @@ import {
 import { PanelStore, safeError } from "./panel-store.mjs";
 import { Setup } from "./setup.mjs";
 import { modelChoices } from "./models.mjs";
+import { Addons, FEATURE_DEFAULTS } from "./addons.mjs";
+import { UsageStore } from "./usage.mjs";
+import { Attachments, fileType } from "./attachments.mjs";
 
 const webRoot = fileURLToPath(new URL("../web-dist/", import.meta.url));
 const mime = {
   ".html": "text/html; charset=utf-8",
   ".js": "application/javascript; charset=utf-8",
+  ".mjs": "application/javascript; charset=utf-8",
   ".css": "text/css; charset=utf-8",
   ".svg": "image/svg+xml",
   ".png": "image/png",
   ".mp4": "video/mp4",
   ".pdf": "application/pdf",
+  ".woff2": "font/woff2",
+  ".woff": "font/woff",
+  ".ttf": "font/ttf",
 };
 const validPath = (p) =>
   typeof p === "string" &&
@@ -122,7 +129,7 @@ export async function startPanel(
     res.setHeader("Referrer-Policy", "no-referrer");
     res.setHeader(
       "Content-Security-Policy",
-      "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' blob:; media-src 'self' blob:; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' blob:; media-src 'self' blob:; connect-src 'self'; frame-src 'self' blob:; object-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
     );
     try {
       const c = accessConfig(root);
@@ -136,10 +143,12 @@ export async function startPanel(
         if (req.method !== "GET" && req.method !== "HEAD")
           throw new Error("method_not_allowed");
         const relative = p === "/" ? "index.html" : p.replace(/^\//, "");
-        if (!(
-          relative === "index.html" ||
-          /^assets\/[a-zA-Z0-9_.-]+$/.test(relative)
-        ))
+        if (
+          !(
+            relative === "index.html" ||
+            /^assets\/[a-zA-Z0-9_.-]+$/.test(relative)
+          )
+        )
           throw new Error("file_not_found");
         const file = path.join(webRoot, relative);
         if (!fs.existsSync(file)) throw new Error("build_web_first");
@@ -166,7 +175,8 @@ export async function startPanel(
           throw new Error("origin_not_allowed");
       }
       if (p === "/api/login" && req.method === "POST") {
-        if (policy.mode !== "local") throw new Error("cloudflare_login_required");
+        if (policy.mode !== "local")
+          throw new Error("cloudflare_login_required");
         if (Date.now() - loginWindow > 60000) {
           loginWindow = Date.now();
           loginFailures = 0;
@@ -199,7 +209,10 @@ export async function startPanel(
         throw new Error("csrf_required");
       const send = (value) => json(req, res, 200, value);
       if (p === "/api/setup" && req.method === "POST") {
-        if (policy.mode !== "local" && !same(req.headers["x-starport-admin"], key))
+        if (
+          policy.mode !== "local" &&
+          !same(req.headers["x-starport-admin"], key)
+        )
           throw new Error("operator_key_required");
         const { action, ...input } = await body(req, 24 * 1024 * 1024);
         send(await setup.dispatch(action, input));
@@ -220,7 +233,15 @@ export async function startPanel(
           health: db.health,
           sessions: db.list(),
           epoch: db.epoch,
+          addons: new Addons(root).list(),
+          featureDefaults: FEATURE_DEFAULTS,
         });
+        return;
+      }
+      if (p === "/api/usage" && req.method === "GET") {
+        const session = url.searchParams.get("session");
+        if (session) db.get(session);
+        send(new UsageStore(root).snapshot(session));
         return;
       }
       if (p === "/api/sessions" && req.method === "POST") {
@@ -233,11 +254,13 @@ export async function startPanel(
           "Set-Cookie",
           "starport_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0",
         );
-        send({ url: policy.mode === "cloudflare" ? "/cdn-cgi/access/logout" : "/" });
+        send({
+          url: policy.mode === "cloudflare" ? "/cdn-cgi/access/logout" : "/",
+        });
         return;
       }
       const match = p.match(
-        /^\/api\/sessions\/([a-f0-9]{32})\/(messages|send|stop|settings|files|upload-begin|upload-chunk|upload-finish|logs|artifacts|cancel|download)$/,
+        /^\/api\/sessions\/([a-f0-9]{32})\/(messages|send|stop|settings|files|upload-begin|upload-chunk|upload-finish|logs|artifacts|cancel|download|attachments|attach-begin|attach-chunk|attach-finish|attachment|cloud-file|cloud-file-meta)$/,
       );
       if (!match) throw new Error("route_not_found");
       const [, id, op] = match,
@@ -262,8 +285,123 @@ export async function startPanel(
         return;
       }
       if (op === "settings" && req.method === "POST") {
-        send(await db.settings(id, await body(req, 4096)));
+        send(await db.settings(id, await body(req, 16000)));
         return;
+      }
+      if (op.startsWith("attach") || op.startsWith("cloud-file")) {
+        const owned = new Attachments(root, id);
+        if (op === "cloud-file-meta" && req.method === "GET") {
+          send(await owned.cloudMetadata(url.searchParams.get("id")));
+          return;
+        }
+        if (op === "attachments" && req.method === "GET") {
+          send({ files: owned.list() });
+          return;
+        }
+        if (
+          ["attach-begin", "attach-chunk", "attach-finish"].includes(op) &&
+          req.method === "POST"
+        ) {
+          const input = await body(req);
+          send(
+            op === "attach-begin"
+              ? owned.begin(input)
+              : op === "attach-chunk"
+                ? owned.chunk(input)
+                : owned.finish(input),
+          );
+          return;
+        }
+        if (op === "attachment" && req.method === "GET") {
+          const x = owned.item(url.searchParams.get("id"));
+          const data = fs.readFileSync(path.join(owned.dir, x.id));
+          if (
+            crypto.createHash("sha256").update(data).digest("hex") !== x.sha256
+          )
+            throw new Error("attachment_integrity");
+          const preview = url.searchParams.get("preview") === "1",
+            type = fileType(x.name);
+          if (preview)
+            res.setHeader(
+              "Content-Security-Policy",
+              "default-src 'none'; frame-ancestors 'self'; sandbox",
+            );
+          res.setHeader(
+            "Content-Type",
+            preview ? type : "application/octet-stream",
+          );
+          res.setHeader(
+            "Content-Disposition",
+            (preview && type !== "application/octet-stream"
+              ? "inline"
+              : "attachment") +
+              "; filename*=UTF-8''" +
+              encodeURIComponent(x.name),
+          );
+          const range = req.headers.range?.match(/^bytes=(\d+)-(\d*)$/);
+          const start = range ? Number(range[1]) : 0,
+            end = range?.[2]
+              ? Math.min(Number(range[2]), data.length - 1)
+              : data.length - 1;
+          if (start > end || start >= data.length) {
+            res.writeHead(416, { "Content-Range": "bytes */" + data.length });
+            res.end();
+            return;
+          }
+          res.setHeader("Accept-Ranges", "bytes");
+          if (range) {
+            res.statusCode = 206;
+            res.setHeader(
+              "Content-Range",
+              `bytes ${start}-${end}/${data.length}`,
+            );
+          }
+          res.setHeader("Content-Length", end - start + 1);
+          res.end(data.subarray(start, end + 1));
+          return;
+        }
+        if (op === "cloud-file" && req.method === "GET") {
+          const { metadata, response } = await owned.cloud(
+            url.searchParams.get("id"),
+          );
+          const name = String(metadata.filename || "artifact").replace(
+              /[\\/\x00-\x1f]/g,
+              "_",
+            ),
+            type = fileType(name);
+          if (url.searchParams.get("preview") === "1")
+            res.setHeader(
+              "Content-Security-Policy",
+              "default-src 'none'; frame-ancestors 'self'; sandbox",
+            );
+          res.setHeader(
+            "Content-Type",
+            url.searchParams.get("preview") === "1"
+              ? type
+              : "application/octet-stream",
+          );
+          res.setHeader(
+            "Content-Disposition",
+            (url.searchParams.get("preview") === "1" &&
+            type !== "application/octet-stream"
+              ? "inline"
+              : "attachment") +
+              "; filename*=UTF-8''" +
+              encodeURIComponent(name),
+          );
+          try {
+            for await (const b of response.body) {
+              if (res.destroyed) break;
+              if (!res.write(b))
+                await Promise.race([once(res, "drain"), once(res, "close")]);
+            }
+          } finally {
+            if (res.destroyed) await response.body?.cancel?.().catch(() => {});
+          }
+          res.end();
+          return;
+        }
+        throw new Error("method_not_allowed");
       }
       const remote = db.remote(r);
       const job = () => {
@@ -348,7 +486,22 @@ export async function startPanel(
             path: file,
             ...(operation === "artifact.read" ? { job: job() } : {}),
           };
-        let offset = 0,
+        const range = req.headers.range?.match(/^bytes=(\d+)-(\d*)$/),
+          start = range ? Number(range[1]) : 0,
+          requestedEnd = range?.[2] ? Number(range[2]) : Infinity,
+          preview = url.searchParams.get("preview") === "1";
+        if (
+          requestedEnd < start ||
+          !Number.isSafeInteger(start) ||
+          (requestedEnd !== Infinity && !Number.isSafeInteger(requestedEnd))
+        )
+          throw new Error("invalid_range");
+        if (preview)
+          res.setHeader(
+            "Content-Security-Policy",
+            "default-src 'none'; frame-ancestors 'self'; sandbox",
+          );
+        let offset = start,
           version,
           total,
           first = true;
@@ -356,7 +509,7 @@ export async function startPanel(
           const row = await remote.call(operation, {
             ...args,
             offset,
-            size: 1024 * 1024,
+            size: Math.min(1024 * 1024, requestedEnd - offset + 1),
             ...(operation === "artifact.read" && version ? { version } : {}),
           });
           const bytes = Buffer.from(row.data, "base64");
@@ -372,19 +525,36 @@ export async function startPanel(
           total = row.total;
           if (first) {
             first = false;
-            res.setHeader("Content-Type", "application/octet-stream");
-            res.setHeader("Content-Length", total);
+            if (range && start >= total) {
+              res.writeHead(416, { "Content-Range": "bytes */" + total });
+              res.end();
+              return;
+            }
+            const end = Math.min(requestedEnd, total - 1);
+            res.setHeader(
+              "Content-Type",
+              preview ? fileType(file) : "application/octet-stream",
+            );
+            res.setHeader("Content-Length", end - start + 1);
+            res.setHeader("Accept-Ranges", "bytes");
+            if (range) {
+              res.statusCode = 206;
+              res.setHeader("Content-Range", `bytes ${start}-${end}/${total}`);
+            }
             res.setHeader(
               "Content-Disposition",
-              "attachment; filename*=UTF-8''" +
+              (preview && fileType(file) !== "application/octet-stream"
+                ? "inline"
+                : "attachment") +
+                "; filename*=UTF-8''" +
                 encodeURIComponent(file.split("/").at(-1)),
             );
-            res.setHeader("X-File-Version", version);
+            if (version) res.setHeader("X-File-Version", version);
           }
           if (bytes.length && !res.write(bytes))
             await Promise.race([once(res, "drain"), once(res, "close")]);
           offset += bytes.length;
-          if (offset === total) {
+          if (offset === total || offset > requestedEnd) {
             res.end();
             return;
           }

@@ -11,5 +11,9 @@
 `package-lock.json` 固定 JavaScript 依赖。Pi 的间接 Undici 依赖使用已修补的 8.12.3；操作端代理使用与 Node.js 22 fetch 相容的 7.30.1。
 
 - 网页：React、Vite、react-markdown、hash-wasm；依赖版本固定于 package-lock.json。
+- 富文本：remark-gfm、remark-math、rehype-katex、KaTeX（含 KaTeX 字体）；各自 MIT 授权。
+- KaTeX 及间接依赖统一固定到 0.19.1，包含 GHSA-238p-pmpm-9mq7 修复；不降级到旧版渲染器。
+- 中文转换：OpenCC-JS，MIT / Apache-2.0；转换字典及第三方说明随 npm 包保留。
+- PDF 预览：Mozilla PDF.js（Apache-2.0），查看器、worker、字符映射和标准字体由本工作台提供，不使用外部 CDN。
 - Access JWT：jose；来源站验证签名与应用 audience。
 - cloudflared 与阿里 ProxyClient：按官方来源与固定 SHA-256 下载，未把执行档打包到仓库。

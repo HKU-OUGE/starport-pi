@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef } from "react";
 import { setup, setAdmin } from "./api";
 import { operationProgress } from "./operation-progress.mjs";
+import Extensions from "./Extensions";
 
 const initialServer = {
   name: "server-alpha",
@@ -125,6 +126,7 @@ export default function Setup({ onClose, onChange, guideOnly = false }) {
           ["servers", "02 服务器"],
           ["access", "03 远端入口"],
           ["model", "模型"],
+          ["extensions", "插件 / Skill / MCP"],
           ["local", "本机隔离"],
           ["transfer", "导入与导出"],
           ["keys", "SSH 密钥"],
@@ -139,6 +141,7 @@ export default function Setup({ onClose, onChange, guideOnly = false }) {
           </button>
         ))}
       </nav>
+      {tab === "extensions" && <Extensions onChange={onChange} />}
       {error === "operator_key_required" && (
         <form
           className="card"
@@ -889,6 +892,26 @@ export default function Setup({ onClose, onChange, guideOnly = false }) {
       )}
       {tab === "guide" && (
         <article className="card guide">
+          <h2>会话工具与扩展</h2>
+          <p>
+            输入 /
+            查找工具和插件；在“工具与偏好”中选择并应用。搜索、抓取、代码执行、顾问和快速模式默认关闭，缓存默认
+            5 分钟。纯聊天可以使用这些 Anthropic 工具，无需连接项目服务器。
+          </p>
+          <p>
+            “插件 / Skill / MCP”管理页支持 Skill 文本、声明式工具包、远端 HTTPS
+            MCP 及工具允许列表。MCP 专用 token 会交给 Anthropic
+            连接器和对应服务；此入口不运行管理电脑的插件脚本或 stdio。
+          </p>
+          <p>
+            文字发送时转繁体、显示时转简体；代码、路径、网址和附件原样保留。附加图片、PDF
+            或文档后再发送；Office、压缩包和更大文本需开启代码执行。项目文件页继续支持原有的大文件分块上传。
+          </p>
+          <p>
+            用量页统计本工作台实际收到的
+            token、缓存和调用次数。速率余量不是账户余额，费用估算不包含工具额外收费。完整说明见仓库
+            docs/TOOLS.md。
+          </p>
           <h2>从一台新电脑开始</h2>
           <ol>
             <li>执行安装器并启动面板，使用终端中的访问码登录。</li>
@@ -924,8 +947,8 @@ export default function Setup({ onClose, onChange, guideOnly = false }) {
           </p>
           <h3>每个人各自一套</h3>
           <p>
-            启用 Access 后，本机网址仍用本机访问码登录；公网网址使用 Access 登录。
-            中断时保留原配置，更新并重启面板后再次应用即可接续。
+            启用 Access 后，本机网址仍用本机访问码登录；公网网址使用 Access
+            登录。 中断时保留原配置，更新并重启面板后再次应用即可接续。
           </p>
           <p>
             不同使用者使用不同
@@ -942,7 +965,8 @@ export default function Setup({ onClose, onChange, guideOnly = false }) {
           <p>
             镜像与运行时下载会自动重试并接续缓存；持续收到数据时不会在五分钟后停止。
             重试后仍失败，先按错误提示检查出口或磁盘，再到服务器页重新初始化。
-            保留原配置目录中的 install-cache，不必删除已下载的部分。文件通过完整校验后才会安装。
+            保留原配置目录中的
+            install-cache，不必删除已下载的部分。文件通过完整校验后才会安装。
           </p>
           <h3>SSH 密钥</h3>
           <pre>

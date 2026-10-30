@@ -11,6 +11,7 @@ import {
   validateServer,
 } from "./config.mjs";
 import { normalizeNode } from "./network.mjs";
+import { Addons, features } from "./addons.mjs";
 const scrypt = promisify(crypto.scrypt);
 const limit = 16 * 1024 * 1024;
 const read = (file) => JSON.parse(fs.readFileSync(file, "utf8"));
@@ -46,11 +47,15 @@ export function collectProfile(root, { includeSecrets = false } = {}) {
       preferences: {
         model: c.model,
         effort: c.effort,
+        features: features(c.features),
         interfaceLanguage: "zh-CN",
       },
       network: { subscriptions: [], selected: c.proxy.selected || null },
       servers: [],
       cloudflare: null,
+      addons: includeSecrets
+        ? new Addons(root).read()
+        : new Addons(root).list(),
     };
   for (const s of c.subscriptions) {
     const data = read(path.join(root, "subscriptions", id(s.id) + ".json"));
@@ -204,7 +209,8 @@ export async function importProfile(root, value, password) {
     Object.keys(c.servers).length ||
     fs.existsSync(path.join(root, "secrets.json")) ||
     fs.existsSync(path.join(root, "cloudflare", "receipt.json")) ||
-    fs.existsSync(path.join(root, "cloudflare", "enrollment.json"))
+    fs.existsSync(path.join(root, "cloudflare", "enrollment.json")) ||
+    fs.existsSync(path.join(root, "addons.json"))
   )
     throw new Error("import_requires_empty_profile");
   if (
@@ -226,6 +232,22 @@ export async function importProfile(root, value, password) {
     text ? writeSecret(file, value) : writePrivate(file, value);
   };
   try {
+    c.features = features(b.preferences.features);
+    if (b.addons) {
+      const validated = new Addons(namespace);
+      for (const kind of ["skills", "mcp", "plugins"]) {
+        if (!Array.isArray(b.addons[kind]))
+          throw new Error("invalid_import_addons");
+        for (const entry of b.addons[kind]) {
+          const { tokenConfigured, ...item } = entry;
+          validated.save(kind, { ...item, enabled: false });
+        }
+      }
+      put(path.join(root, "addons.json"), validated.read());
+      c.features.skills = [];
+      c.features.mcp = [];
+      c.features.plugins = [];
+    }
     for (const s of b.servers) {
       const name = id(s.name);
       if (Object.hasOwn(servers, name)) throw new Error("duplicate_server");

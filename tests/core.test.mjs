@@ -78,3 +78,22 @@ test('model tools have no operator configuration or local execution entry',async
   assert.equal(calls[0][0],'job.submit');assert.equal(calls[0][1].command,'printf test');
   for(const tool of tools)assert.equal(tool.parameters.additionalProperties,false);
 });
+
+test('project search and edit use only bounded remote workspace operations',async()=>{
+  const calls=[];
+  const remote={call:async(op,args)=>{
+    calls.push([op,args]);
+    if(op==='file.list')return {entries:[{name:'example.txt',kind:'file',bytes:8},{name:'.git',kind:'directory',bytes:0}]};
+    if(op==='file.read')return {bytes:8,data:Buffer.from('match\nx\n').toString('base64')};
+    if(op==='job.submit')return {id:'a'.repeat(32)};
+    throw new Error('unexpected_remote_operation');
+  }};
+  const tools=makeTools(remote);
+  const found=JSON.parse((await tools.find(x=>x.name==='grep').execute('x',{query:'match'},null)).content[0].text);
+  assert.deepEqual(found.matches,[{path:'example.txt',line:1,text:'match'}]);
+  assert.ok(!calls.some(([,a])=>a.path==='.git'));
+  await tools.find(x=>x.name==='edit').execute('x',{path:'example.txt',oldText:'match',newText:'updated'},null);
+  assert.equal(calls.at(-1)[0],'job.submit');
+  assert.ok(calls.at(-1)[1].command.startsWith('python3 -c '));
+  assert.ok(calls.at(-1)[1].command.includes("'/workspace'"));
+});

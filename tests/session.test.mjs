@@ -98,7 +98,7 @@ test("real Pi SDK routes tool calls remotely and excludes operator context", asy
         request.tools || request.messages.flatMap((m) => m.toolsAdded || []);
       assert.ok(
         !exposed.some((t) =>
-          ["exec", "local_bash", "grep", "find"].includes(t.name),
+            ["exec", "local_bash", "local_grep", "local_find"].includes(t.name),
         ),
       );
     }

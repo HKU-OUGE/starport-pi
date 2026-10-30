@@ -10,6 +10,8 @@ Starport Pi 把操作端、控制通道、模型工具与执行环境分开。�
 | 程序与网路 | gVisor 的独立 PID／IPC／UTS／network 视图，`--network=none`，无 capabilities，no-new-privileges |
 | 外网 | guest loopback HTTP → 单一 Unix socket → SSH 反向转发 → 操作端 Mihomo → 选定节点；没有 DIRECT fallback |
 | API | 只能透过 loopback 代理连接 Anthropic HTTPS API；代理失效即失败 |
+| 服务端工具 | 搜索、抓取、顾问、代码执行在 Anthropic 服务端；不挂载操作端文件，不传本机定位或身份元数据 |
+| 扩展 | 显式选择 Skill 内容、声明式插件及 HTTPS MCP 工具允许列表；不执行本机扩展或 stdio |
 | 区域设置 | 台北时区、繁体 locale、UTF-8、TC 字型；清空 machine-id 和 boot-id，固定 hostname |
 | 文件操作 | descriptor-relative 路径、拒绝 traversal／symlink／特殊文件，分块及整档杂凑 |
 
@@ -26,6 +28,10 @@ GPU 使用 gVisor nvproxy，限定装置和驱动库，核对精确驱动版本�
 SSH 连线帐号是可信管理帐号。多名不互信的使用者应使用不同 worker／实例和密钥；资料 ID 不是跨使用者授权系统。不要让模型载入操作端 extension，或给它另一个能在操作端执行命令的工具。
 
 地域设置不会变更实体位置、网路地理位置、帐号所属地区或供应商的使用资格。这是工作环境一致性与资料隔离工具，并不提供帐号风险保证。
+
+Anthropic 的服务端工具访问网页或 MCP 时，使用 Anthropic 管理的网络，不使用操作端的真实网络。MCP 专用 token 必须交给连接器及对应服务完成认证，不能承诺隐藏用户主动配置的服务身份。附件内容、文件名、元数据和工具返回的业务内容仍可能包含身份信息。配置管理入口不属于模型工具；不会自动读取本机浏览器、账户或凭据。
+
+人工上传的附件进入该会话独立的私有目录，下载需面板认证。公开或其他会话不能通过路径、上传 ID 或任意 Files API ID 获取文件。远端图片链接不会自动加载，避免浏览器绕过代理访问模型返回的追踪地址。HTML / SVG 不以内联活动内容执行；普通 Markdown 不启用原始 HTML。
 
 ## 公开版本
 

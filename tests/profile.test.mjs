@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import crypto from "node:crypto";
 import { load, save, writePrivate } from "../src/config.mjs";
+import { Addons } from "../src/addons.mjs";
 import {
   collectProfile,
   exportProfile,
@@ -12,6 +13,54 @@ import {
   importProfile,
   profileSummary,
 } from "../src/profile-transfer.mjs";
+
+test("encrypted extensions import without executing or enabling entries", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "starport-addons-export-")),
+    source = path.join(dir, "source"),
+    target = path.join(dir, "target");
+  try {
+    const c = load(source);
+    c.features = { webSearch: true, cache: "1h" };
+    save(c, source);
+    const a = new Addons(source);
+    a.save("skills", {
+      id: "review",
+      label: "Review",
+      content: "Cite sources.",
+      enabled: true,
+    });
+    a.save("mcp", {
+      id: "public",
+      label: "Public",
+      url: "https://mcp.example.com/mcp",
+      tools: ["search"],
+      token: "example-private-mcp-token",
+      enabled: true,
+    });
+    a.save("plugins", {
+      id: "bundle",
+      label: "Bundle",
+      description: "Review",
+      skills: ["review"],
+      mcp: ["public"],
+      enabled: true,
+    });
+    const bundle = await exportProfile(source, {
+      includeSecrets: true,
+      password: "example-strong-password",
+    });
+    assert.ok(!JSON.stringify(bundle).includes("example-private-mcp-token"));
+    await importProfile(target, bundle, "example-strong-password");
+    const imported = new Addons(target);
+    assert.equal(imported.read().mcp[0].token, "example-private-mcp-token");
+    for (const list of Object.values(imported.read()))
+      assert.ok(list.every((x) => !x.enabled));
+    assert.equal(load(target).features.cache, "1h");
+    assert.deepEqual(load(target).features.plugins, []);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
 
 test("encrypted profiles round-trip on fresh machines without runtime identities or operator paths", async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "starport-transfer-")),
@@ -196,8 +245,9 @@ test("repair changes only unused DSW identities and retains credentials and othe
         },
       ],
     };
-    const { updateUnverifiedConnections } =
-      await import("../src/profile-transfer.mjs");
+    const { updateUnverifiedConnections } = await import(
+      "../src/profile-transfer.mjs"
+    );
     const done = await updateUnverifiedConnections(root, profile, "");
     assert.deepEqual(done.updated, ["alpha"]);
     const after = load(root);

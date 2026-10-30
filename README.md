@@ -12,6 +12,7 @@
 | Pi SDK、Claude API、模型与 effort 选择 | gVisor 工作区、CPU／内存／GPU 预算 |
 | 部署向导、订阅管理、Cloudflare 远端入口 | 项目文件、即时日志、取消、产物下载 |
 | 人工选择文件上传，分块续传及 SHA-256 | 发布只读资料版本，按资料 ID 使用 |
+| 搜索、抓取、代码执行、顾问、缓存与用量 | Skills、声明式插件、远端 MCP |
 
 ## Windows 开始使用
 
@@ -29,6 +30,8 @@ powershell -ExecutionPolicy Bypass -File .\scripts\install.ps1
 
 网页提供纯聊天、本机隔离项目和远端项目，以及思考／工具状态、任务、增量日志和文件。手机可透过个别授权的 Tunnel + Access 网址使用。
 
+输入 `/` 查找工具与扩展。中文发送时转繁体、显示时转简体；代码和文件原样保留。会话内可选择 Anthropic 工具、查看 API 用量与速率余量，附件支持图片、PDF、文档及媒体预览。
+
 后续启动：`.\starport-pi.cmd panel`。Linux／macOS：`bash scripts/install.sh`，再执行 `npm run panel`。终端工作台仍可用 `npm start`。
 
 ## 执行环境
@@ -45,6 +48,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\install.ps1
 - [本机隔离项目](docs/LOCAL.md) · [加密配置导入导出](docs/CONFIGURATION.md)
 - [完整安装与服务器配置](docs/SETUP.md)
 - [操作、文件与共享资料](docs/USAGE.md)
+- [会话工具、扩展、附件与用量](docs/TOOLS.md)
 - [隔离边界与资源管理](SECURITY.md)
 - [验证范围](docs/VALIDATION.md)
 

@@ -130,3 +130,35 @@ account resources or existing console were changed for this check.
 Local checks: 40 Node tests, 13 Python tests, web build and publication audit
 passed. Desktop browser page identity, rendered content, interaction and console
 checks passed with no framework error overlay.
+
+## Native tools and extensions (0.4.0)
+
+The real Pi SDK was exercised against deterministic Anthropic SSE fixtures:
+server tool blocks, citations, pause/resume, the following user turn and a disk
+reload retain the provider content. Tests check that replay markers, operator
+paths and account response headers do not enter public views. Advisor iterations
+are counted once; cache prices use the model's actual read rate. The Files API
+fixture checks multipart upload and reuse of an existing file ID.
+
+The HTTP checks cover authenticated attachment upload/download, whole-file and
+chunk hashes, retrying an acknowledged chunk, Range responses and rejection of
+another session's grant. Existing proxy-failure and zero-local-tool checks pass.
+Skills and MCP require explicit selection; plugin imports cannot run host code.
+The operator tools and worker processes were not restarted for these tests.
+
+Browser validation used an independent loopback panel with synthetic model and
+worker data: Markdown table/task-list/math/code rendering, Simplified display
+of Traditional transcript text, conversion before sending, the slash palette,
+capability settings, Skill creation, MCP configuration fields, attachment
+upload/preview/download and usage display. Both desktop and a 390 × 844 mobile
+viewport were checked. The downloaded PNG's SHA-256 matches its uploaded source.
+These checks do not represent paid API account eligibility, real MCP service
+acceptance, cloud code execution or fast-mode throughput measurements.
+
+PDF preview uses the bundled PDF.js worker rather than browser PDF plugins.
+A one-page PDF was rendered to canvas, and an MP4 reached decoded media state
+with the expected one-second duration. Character maps and standard fonts are
+served locally. A stale lazy-loaded bundle during the intentional QA rebuild
+showed a reload action; refreshing restored the panel instead of leaving a blank
+page. Local validation finished with 49 Node tests, 13 Python tests, a production
+build, a clean publication audit and no production npm audit findings.

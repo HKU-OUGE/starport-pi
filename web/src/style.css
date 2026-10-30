@@ -1032,3 +1032,230 @@ code {
 .modelbar label {
   white-space: nowrap;
 }
+
+/* Conversation capabilities */
+.modelbar {
+  flex-wrap: wrap;
+}
+.session-features {
+  flex-basis: 100%;
+  order: 5;
+  border-top: 1px solid var(--line, #d8dfdf);
+  padding-top: 10px;
+}
+.session-features summary {
+  cursor: pointer;
+}
+.session-features fieldset {
+  border: 0;
+  padding: 12px 0 0;
+}
+.feature-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px 22px;
+  margin: 10px 0;
+}
+.feature-grid label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.85rem;
+}
+.feature-grid input[type="number"] {
+  width: 70px;
+}
+.feature-grid select {
+  max-width: 140px;
+}
+input[type="checkbox"] {
+  width: auto;
+  accent-color: var(--accent, #26766d);
+}
+.table-scroll {
+  max-width: 100%;
+  overflow: auto;
+}
+.table-scroll table {
+  border-collapse: collapse;
+  width: 100%;
+}
+.table-scroll th,
+.table-scroll td {
+  padding: 8px 10px;
+  border: 1px solid var(--line, #d8dfdf);
+  text-align: left;
+}
+.markdown img,
+.attachment-card img,
+.attachment-card video {
+  max-width: 100%;
+  max-height: 540px;
+  border-radius: 10px;
+}
+.markdown .katex-display {
+  overflow: auto hidden;
+  padding: 8px 0;
+}
+.code-block {
+  position: relative;
+}
+.code-block > button {
+  float: right;
+  font-size: 0.75rem;
+  padding: 3px 8px;
+  margin: 4px;
+}
+.sources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 12px 0;
+}
+.sources a {
+  font-size: 0.8rem;
+  padding: 5px 10px;
+  border: 1px solid var(--line, #d8dfdf);
+  border-radius: 7px;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+.composer {
+  position: relative;
+  flex-wrap: wrap;
+}
+.attached-list {
+  flex-basis: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.attached-list > span {
+  border-radius: 8px;
+  background: var(--surface);
+  padding: 4px 10px;
+  font-size: 0.8rem;
+}
+.attached-list button {
+  border: 0;
+  padding: 2px 7px;
+}
+.slash-menu {
+  position: absolute;
+  bottom: 100%;
+  left: 12px;
+  right: 12px;
+  max-height: 350px;
+  overflow: auto;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 8px;
+  box-shadow: 0 10px 35px #132f2925;
+  z-index: 20;
+}
+.slash-menu button {
+  width: 100%;
+  display: flex;
+  text-align: left;
+  align-items: center;
+  gap: 20px;
+  border: 0;
+  background: none;
+  padding: 10px;
+}
+.slash-menu button[aria-selected="true"] {
+  background: var(--hover);
+}
+.slash-menu span {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+.attachment-card {
+  border: 1px solid var(--line);
+  padding: 10px;
+  border-radius: 10px;
+  margin: 10px 0;
+}
+.attachment-card > div {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.attachment-card b {
+  flex: 1;
+  overflow-wrap: anywhere;
+  font-size: 0.85rem;
+}
+.attachment-card iframe {
+  width: 100%;
+  height: 560px;
+  margin-top: 10px;
+  border: 0;
+}
+.usage-panel {
+  padding: 20px;
+  overflow: auto;
+}
+.usage-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+.usage-grid .card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px;
+}
+.usage-grid span {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+.usage-grid strong {
+  font-size: 1.25rem;
+}
+.usage-panel dl {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  font-size: 0.8rem;
+  overflow-wrap: anywhere;
+}
+.usage-panel dd {
+  margin: 0;
+}
+@media (max-width: 650px) {
+  .usage-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .session-features {
+    max-width: 100%;
+  }
+  .feature-grid {
+    flex-direction: column;
+  }
+  .slash-menu button {
+    flex-wrap: wrap;
+    gap: 4px 10px;
+  }
+  .attachment-card iframe {
+    height: 380px;
+  }
+}
+.pdf-preview {
+  width: 100%;
+  margin-top: 12px;
+}
+.pdf-preview canvas {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  background: white;
+}
+.pdf-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}

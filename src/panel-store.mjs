@@ -5,6 +5,14 @@ import { load, writePrivate, privateDir } from "./config.mjs";
 import { Remote } from "./transport.mjs";
 import { modelChoices } from "./models.mjs";
 import { makeSession } from "./session.mjs";
+import { Addons, features } from "./addons.mjs";
+import { nativeDefinition } from "./native-tools.mjs";
+import {
+  Attachments,
+  attachmentMarker,
+  markerPattern,
+} from "./attachments.mjs";
+import { toTraditional } from "./chinese.mjs";
 
 const uid = () => crypto.randomBytes(16).toString("hex");
 export const safeError = (e) =>
@@ -14,7 +22,22 @@ const message = (m) => ({
   content: (Array.isArray(m.content)
     ? m.content
     : [{ type: "text", text: m.content || "" }]
-  ).filter((c) => ["text", "thinking", "toolCall"].includes(c.type)),
+  )
+    .filter((c) => ["text", "thinking", "toolCall"].includes(c.type))
+    .map((c) =>
+      c.type === "text" ? { ...c, text: c.text.replace(markerPattern, "") } : c,
+    ),
+  attachments: (Array.isArray(m.content) ? m.content : []).flatMap((c) =>
+    c.type === "text"
+      ? [...c.text.matchAll(markerPattern)].map((x) => x[1])
+      : [],
+  ),
+  native: m.native,
+  usage: m.usage,
+  error:
+    m.stopReason === "error"
+      ? safeError({ message: m.errorMessage })
+      : undefined,
   toolName: m.toolName,
   toolCallId: m.toolCallId,
   isError: m.isError,
@@ -70,6 +93,8 @@ export class PanelStore {
       workspace: r.workspace,
       model: r.model,
       effort: r.effort,
+      features: features(r.features),
+      sessionId: r.id,
     };
   }
   remote(r) {
@@ -102,7 +127,7 @@ export class PanelStore {
     this.save();
   }
   list() {
-    return this.rows.map(({ messages, pending, ...r }) => ({
+    return this.rows.map(({ messages, pending, addonRevision, ...r }) => ({
       ...r,
       jobs: r.jobs.map(({ command, ...j }) => j),
     }));
@@ -130,6 +155,7 @@ export class PanelStore {
       workspace,
       model: config.model,
       effort: config.effort,
+      features: features(config.features),
       status: "idle",
       createdAt: Date.now(),
       messages: [],
@@ -164,6 +190,14 @@ export class PanelStore {
     this.touch(r);
   }
   async session(r) {
+    const revision = crypto
+      .createHash("sha256")
+      .update(JSON.stringify(new Addons(this.root).read()))
+      .digest("hex");
+    if (this.live.has(r.id) && r.addonRevision !== revision) {
+      this.live.get(r.id).dispose();
+      this.live.delete(r.id);
+    }
     if (this.live.has(r.id)) return this.live.get(r.id);
     const made = await this.sessionFactory(
       this.config(r),
@@ -172,6 +206,7 @@ export class PanelStore {
     );
     const s = made.session;
     this.live.set(r.id, s);
+    r.addonRevision = revision;
     this.sync(r, s);
     s.subscribe((e) => {
       if (e.type === "tool_execution_start") {
@@ -185,17 +220,25 @@ export class PanelStore {
         this.touch(r);
       }
       if (e.type === "message_update") {
+        const running = e.message?.native?.tools?.findLast(
+          (t) => t.status === "running",
+        );
+        if (e.message?.native) {
+          r.status = running ? "tool" : "thinking";
+          if (running) r.tool = running.name;
+          else delete r.tool;
+        }
         // Throttle persistence of token deltas; full messages are flushed on end.
         if (Date.now() - (r.lastFlush || 0) > 250) {
           r.lastFlush = Date.now();
           this.sync(r, s, e.message);
         }
       }
-      if (e.type === "message_end") this.sync(r, s);
+      if (e.type === "message_end") this.sync(r, s, e.message);
     });
     return s;
   }
-  async send(id, { text, requestId }) {
+  async send(id, { text, requestId, attachments = [] }) {
     const r = this.get(id);
     if (typeof requestId !== "string" || !/^[a-f0-9-]{16,64}$/.test(requestId))
       throw new Error("request_id_required");
@@ -208,6 +251,14 @@ export class PanelStore {
       Buffer.byteLength(text) > 128 * 1024
     )
       throw new Error("invalid_message");
+    const feature = features(r.features),
+      resolved = new Addons(this.root).resolve(feature);
+    nativeDefinition(feature, resolved, r.model);
+    const files = new Attachments(this.root, id);
+    files.validate(attachments, feature.codeExecution);
+    const prompt =
+      toTraditional(text) +
+      attachments.map((x) => "\n" + attachmentMarker(x)).join("");
     r.status = "thinking";
     r.startedAt = Date.now();
     r.error = null;
@@ -224,12 +275,14 @@ export class PanelStore {
     r.lastRequest = requestId;
     this.touch(r);
     r.pending = s
-      .prompt(text)
+      .prompt(prompt)
       .then(() => {
         const last = s.messages.at(-1);
         r.status = last?.stopReason === "error" ? "error" : "idle";
         if (r.status === "error")
-          r.error = "model_request_failed_check_api_key_or_proxy";
+          r.error =
+            safeError({ message: last.errorMessage }) ||
+            "model_request_failed_check_api_key_or_proxy";
       })
       .catch((e) => {
         r.status = "error";
@@ -250,7 +303,7 @@ export class PanelStore {
     if (s) await s.abort();
     return { stopped: true };
   }
-  async settings(id, { model, effort }) {
+  async settings(id, { model, effort, features: selected }) {
     const r = this.get(id);
     if (["thinking", "tool"].includes(r.status))
       throw new Error("session_busy");
@@ -262,12 +315,15 @@ export class PanelStore {
       )
     )
       throw new Error("invalid_model_settings");
+    const next = features(selected === undefined ? r.features : selected);
+    nativeDefinition(next, new Addons(this.root).resolve(next), model);
     this.live.get(id)?.dispose();
     this.live.delete(id);
     r.model = model;
     r.effort = effort;
+    r.features = next;
     this.touch(r);
-    return { model, effort };
+    return { model, effort, features: next };
   }
   delta(id, cursor, epoch) {
     const r = this.get(id),

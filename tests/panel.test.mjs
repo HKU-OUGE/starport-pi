@@ -231,6 +231,62 @@ test("HTTP panel rejects unauthenticated and cross-origin writes; streams verifi
     );
     assert.equal(download.status, 200);
     assert.deepEqual(Buffer.from(await download.arrayBuffer()), data);
+    const part = await fetch(
+      base +
+        "/api/sessions/" +
+        id +
+        "/download?path=" +
+        encodeURIComponent(grant.path),
+      { headers: { ...head, Range: "bytes=23-88" } },
+    );
+    assert.equal(part.status, 206);
+    assert.deepEqual(
+      Buffer.from(await part.arrayBuffer()),
+      data.subarray(23, 89),
+    );
+    const a = await (
+      await post("sessions/" + id + "/attach-begin", {
+        name: "report.txt",
+        bytes: 6,
+        sha256: crypto.createHash("sha256").update("report").digest("hex"),
+      })
+    ).json();
+    const chunk = {
+      upload: a.id,
+      offset: 0,
+      data: Buffer.from("report").toString("base64"),
+      sha256: crypto.createHash("sha256").update("report").digest("hex"),
+    };
+    assert.equal(
+      (await post("sessions/" + id + "/attach-chunk", chunk)).status,
+      200,
+    );
+    assert.equal(
+      (await post("sessions/" + id + "/attach-finish", { upload: a.id }))
+        .status,
+      200,
+    );
+    const ownedUrl = base + "/api/sessions/" + id + "/attachment?id=" + a.id;
+    assert.equal((await fetch(ownedUrl)).status, 401);
+    assert.equal(
+      (
+        await fetch(
+          base + "/api/sessions/" + other.id + "/attachment?id=" + a.id,
+          { headers: head },
+        )
+      ).status,
+      404,
+    );
+    const attached = await fetch(ownedUrl, {
+      headers: { ...head, Range: "bytes=1-3" },
+    });
+    assert.equal(attached.status, 206);
+    assert.equal(await attached.text(), "epo");
+    assert.equal(
+      (await post("sessions/" + other.id + "/attach-finish", { upload: a.id }))
+        .status,
+      404,
+    );
     assert.equal(
       (
         await fetch(base + "/api/sessions/" + id + "/download?path=../secret", {

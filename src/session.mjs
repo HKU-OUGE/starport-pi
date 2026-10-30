@@ -8,11 +8,16 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { privateDir } from "./config.mjs";
 import { makeTools, decodeRead } from "./tools.mjs";
+import { Addons, features } from "./addons.mjs";
+import { nativeStream } from "./native-tools.mjs";
+import { UsageStore } from "./usage.mjs";
+import { Attachments } from "./attachments.mjs";
+import { toTraditional } from "./chinese.mjs";
 
 export const SYSTEM_PROMPT =
   "You are a coding assistant working in /workspace on the selected server. Use the available tools to inspect and edit the project, execute commands, manage jobs and access shared data. Commands are asynchronous: inspect their logs and final status before reporting success. The runtime uses Asia/Taipei, zh_TW.UTF-8 and UTF-8. Use Traditional Chinese or English for project documentation and messages. Do not claim that regional settings change the physical location or service eligibility.";
 export const CHAT_SYSTEM_PROMPT =
-  "You are an assistant in conversation-only mode. No filesystem or command-execution tools are available. Discuss, explain and draft content, but do not claim to have inspected files or executed commands. Respond in the language requested by the user.";
+  "You are an assistant in conversation-only mode. No project filesystem or project command-execution tools are available. Discuss, explain and draft content; only use explicitly enabled Anthropic tools and attached files. Never claim access to the operator's local system. Respond in the language requested by the user.";
 
 export async function makeSession(
   config,
@@ -21,7 +26,21 @@ export async function makeSession(
   { modelRuntime, streamFn, inMemory = false } = {},
 ) {
   const chat = config.mode === "chat",
-    prompt = chat ? CHAT_SYSTEM_PROMPT : SYSTEM_PROMPT;
+    selected = features(config.features),
+    addons = new Addons(root).resolve(selected),
+    attachments = config.sessionId
+      ? new Attachments(root, config.sessionId)
+      : null,
+    usage = new UsageStore(root),
+    prompt =
+      (chat ? CHAT_SYSTEM_PROMPT : SYSTEM_PROMPT) +
+      "\nEnabled Anthropic server tools run on Anthropic infrastructure, separate from project execution tools. Only explicitly attached files are available there. Do not claim access to the operator's files or environment. Use Traditional Chinese or English in responses." +
+      addons.skills
+        .map(
+          (s) =>
+            "\n\nSelected skill: " + s.id + "\n" + toTraditional(s.content),
+        )
+        .join("");
   const directory = privateDir(path.join(root, "agent"));
   const cwd = privateDir(path.join(root, "empty-workbench"));
   const settings = SettingsManager.inMemory({
@@ -104,6 +123,17 @@ export async function makeSession(
     tools: tools.map((t) => t.name),
     customTools: tools,
   });
-  if (streamFn) result.session.agent.streamFunction = streamFn;
+  result.session.agent.streamFunction = nativeStream(
+    streamFn || result.session.agent.streamFunction,
+    selected,
+    addons,
+    {
+      session: config.sessionId || sid,
+      onUsage: (row) => usage.record(row),
+      attachments,
+      onNative: (view) => attachments?.register(view.files),
+      costForModel: (id) => runtime.getModel("anthropic", id)?.cost,
+    },
+  );
   return { ...result, tools, resourceLoader: loader };
 }

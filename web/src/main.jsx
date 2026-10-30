@@ -1,6 +1,11 @@
 import React, { useState, useEffect, useRef, lazy, Suspense } from "react";
 import { createRoot } from "react-dom/client";
-import Markdown from "react-markdown";
+import SessionFeatures from "./SessionFeatures";
+import SlashMenu from "./SlashMenu";
+import AttachmentCard from "./AttachmentCard";
+import PreviewBoundary from "./PreviewBoundary";
+const RichMarkdown = lazy(() => import("./RichMarkdown"));
+const Usage = lazy(() => import("./Usage"));
 import { createSHA256 } from "hash-wasm";
 import { api, setCsrf, fileUrl } from "./api";
 import "./style.css";
@@ -107,20 +112,7 @@ function Login({ onLogin }) {
     </main>
   );
 }
-const mdComponents = {
-  img: ({ src, alt }) => (
-    <span className="muted">[图片：{alt || "attachment"}]</span>
-  ),
-  a: ({ href, children }) =>
-    /^https?:\/\//.test(href || "") ? (
-      <a href={href} target="_blank" rel="noreferrer">
-        {children}
-      </a>
-    ) : (
-      <span>{children}</span>
-    ),
-};
-function Message({ row }) {
+function Message({ row, session, attachmentNames }) {
   const tool = row.role === "toolResult";
   return (
     <article className={"message " + (row.role === "user" ? "user" : "")}>
@@ -158,12 +150,16 @@ function Message({ row }) {
           row.content.map((c, i) =>
             c.type === "text" ? (
               <div className="markdown" key={i}>
-                <Markdown components={mdComponents}>{c.text}</Markdown>
+                <Suspense fallback={<pre>{c.text}</pre>}>
+                  <RichMarkdown text={c.text} session={session} />
+                </Suspense>
               </div>
             ) : c.type === "thinking" ? (
               <details className="thinking" key={i}>
                 <summary>思考过程</summary>
-                <Markdown>{c.thinking}</Markdown>
+                <Suspense fallback={null}>
+                  <RichMarkdown text={c.thinking} session={session} />
+                </Suspense>
               </details>
             ) : c.type === "toolCall" ? (
               <details key={i} className="tool" open={c.name === "bash"}>
@@ -177,6 +173,62 @@ function Message({ row }) {
               </details>
             ) : null,
           )
+        )}
+        {row.error && (
+          <p role="alert" className="error">
+            {row.error}
+          </p>
+        )}
+        {row.native?.paused && (
+          <p role="status">已达到自动接续上限。发送“继续”可以接续工具回合。</p>
+        )}
+        {row.native?.tools?.map((t) => (
+          <details className="tool" key={t.id}>
+            <summary>
+              {t.name}{" "}
+              <span className="badge">
+                {t.status === "running"
+                  ? "执行中"
+                  : t.status === "error"
+                    ? "未完成"
+                    : "已返回"}
+              </span>
+            </summary>
+            <pre>{JSON.stringify(t.input, null, 2)}</pre>
+            {t.result && <pre>{JSON.stringify(t.result, null, 2)}</pre>}
+          </details>
+        ))}
+        {row.native?.sources?.length > 0 && (
+          <div className="sources">
+            {row.native.sources.map((s, i) => (
+              <a key={s.url} href={s.url} target="_blank" rel="noreferrer">
+                {i + 1}. {s.title}
+              </a>
+            ))}
+          </div>
+        )}
+        {(row.attachments || []).map((id) => (
+          <AttachmentCard
+            key={id}
+            session={session}
+            id={id}
+            name={attachmentNames[id] || "附件"}
+          />
+        ))}
+        {(row.native?.files || []).map((id) => (
+          <AttachmentCard
+            key={id}
+            session={session}
+            id={id}
+            name={"代码执行产物 " + id.slice(-8)}
+            cloud
+          />
+        ))}
+        {row.usage?.totalTokens > 0 && (
+          <small className="muted">
+            {row.usage.input} 输入 · {row.usage.output} 输出 ·{" "}
+            {row.usage.cacheRead} 缓存读取
+          </small>
         )}
       </div>
     </article>
@@ -205,7 +257,11 @@ function App() {
     [artifacts, Art] = useState([]),
     [now, Now] = useState(Date.now()),
     [model, Model] = useState(""),
-    [effort, Effort] = useState("high");
+    [effort, Effort] = useState("high"),
+    [features, Features] = useState({}),
+    [attached, Attached] = useState([]),
+    [attachmentNames, AttachmentNames] = useState({}),
+    [slashHidden, SlashHidden] = useState(false);
   const cursors = useRef({}),
     viewsRef = useRef({}),
     fileInput = useRef(),
@@ -245,7 +301,28 @@ function App() {
   useEffect(() => {
     Model(current?.model || "");
     Effort(current?.effort || "high");
-  }, [active, current?.model, current?.effort]);
+    Features(current?.features || boot?.featureDefaults || {});
+  }, [
+    active,
+    current?.model,
+    current?.effort,
+    JSON.stringify(current?.features),
+  ]);
+  useEffect(() => {
+    if (!active) return;
+    let done = false;
+    api("sessions/" + active + "/attachments")
+      .then((d) => {
+        if (!done)
+          AttachmentNames(
+            Object.fromEntries(d.files.map((f) => [f.id, f.name])),
+          );
+      })
+      .catch(() => {});
+    return () => {
+      done = true;
+    };
+  }, [active, rows.length]);
   useEffect(() => {
     activeRef.current = active;
     if (!active) return;
@@ -373,6 +450,7 @@ function App() {
     J("");
     E("");
     M("");
+    Attached([]);
     requestId.current = null;
   };
   async function send(e) {
@@ -384,9 +462,11 @@ function App() {
     try {
       await api("sessions/" + active + "/send", {
         text: message,
+        attachments: attached.map((x) => x.id),
         requestId: requestId.current,
       });
       M("");
+      Attached([]);
       requestId.current = null;
       refresh();
     } catch (e) {
@@ -395,7 +475,7 @@ function App() {
       Send(false);
     }
   }
-  async function upload(file) {
+  async function upload(file, asAttachment = false) {
     if (!file) return;
     U("计算校验值");
     E("");
@@ -408,15 +488,17 @@ function App() {
             await file.slice(offset, offset + 1048576).arrayBuffer(),
           ),
         );
-      const sha256 = hash.digest("hex"),
-        resumeKey = "starport-upload-" + active + "-" + sha256;
+      const target = active,
+        route = asAttachment ? "attach" : "upload",
+        sha256 = hash.digest("hex"),
+        resumeKey = "starport-" + route + "-" + target + "-" + sha256;
       // Only an opaque grant and checksum are retained; never credentials or file contents.
       let grant;
       try {
         grant = JSON.parse(sessionStorage.getItem(resumeKey));
       } catch {}
       if (!grant) {
-        grant = await api("sessions/" + active + "/upload-begin", {
+        grant = await api("sessions/" + target + "/" + route + "-begin", {
           name: file.name,
           bytes: file.size,
           sha256,
@@ -433,7 +515,7 @@ function App() {
         let binary = "";
         for (let i = 0; i < data.length; i += 32768)
           binary += String.fromCharCode(...data.subarray(i, i + 32768));
-        const r = await api("sessions/" + active + "/upload-chunk", {
+        const r = await api("sessions/" + target + "/" + route + "-chunk", {
           upload: grant.id,
           offset: grant.offset,
           data: btoa(binary),
@@ -447,13 +529,22 @@ function App() {
             "%",
         );
       }
-      const done = await api("sessions/" + active + "/upload-finish", {
+      const done = await api("sessions/" + target + "/" + route + "-finish", {
         upload: grant.id,
       });
       if (done.sha256 !== sha256) throw new Error("upload_checksum");
       sessionStorage.removeItem(resumeKey);
-      M((s) => s + (s ? "\n" : "") + "已附加文件：/workspace/" + done.path);
-      readFiles();
+      if (activeRef.current === target) {
+        if (asAttachment) {
+          Attached((xs) =>
+            xs.some((x) => x.id === done.id) ? xs : [...xs, done],
+          );
+          AttachmentNames((xs) => ({ ...xs, [done.id]: done.name }));
+        } else {
+          M((s) => s + (s ? "\n" : "") + "已附加文件：/workspace/" + done.path);
+          readFiles();
+        }
+      }
     } catch (e) {
       E(e.message + " · 重选同一文件可接续");
     } finally {
@@ -637,6 +728,12 @@ function App() {
                     任务 <span>{current.jobs.length}</span>
                   </button>
                   <button
+                    className={tab === "usage" ? "active" : ""}
+                    onClick={() => T("usage")}
+                  >
+                    用量
+                  </button>
+                  <button
                     disabled={current.mode === "chat"}
                     className={tab === "files" ? "active" : ""}
                     onClick={() => T("files")}
@@ -649,6 +746,13 @@ function App() {
                     {error || current.error}
                   </div>
                 )}
+                {tab === "usage" && (
+                  <PreviewBoundary>
+                    <Suspense fallback={<p>加载用量…</p>}>
+                      <Usage session={active} />
+                    </Suspense>
+                  </PreviewBoundary>
+                )}
                 {tab === "conversation" && (
                   <>
                     <form
@@ -659,6 +763,7 @@ function App() {
                           await api("sessions/" + active + "/settings", {
                             model,
                             effort,
+                            features,
                           });
                           refresh();
                         } catch (e) {
@@ -701,11 +806,23 @@ function App() {
                           ))}
                         </select>
                       </label>
+                      <SessionFeatures
+                        value={features}
+                        onChange={Features}
+                        addons={boot.addons}
+                        disabled={working}
+                      />
                       <button disabled={working}>应用</button>
                     </form>
                     <div className="messages">
                       {rows.map((row) => (
-                        <Message key={row.id} row={row} />
+                        <PreviewBoundary key={row.id}>
+                          <Message
+                            row={row}
+                            session={active}
+                            attachmentNames={attachmentNames}
+                          />
+                        </PreviewBoundary>
                       ))}
                       {!rows.length && (
                         <p className="muted empty-message">
@@ -717,20 +834,100 @@ function App() {
                       <div ref={end} />
                     </div>
                     <form className="composer" onSubmit={send}>
+                      {!slashHidden && /^\/[^\s]*$/.test(message) && (
+                        <SlashMenu
+                          query={message}
+                          addons={boot.addons}
+                          mode={current.mode}
+                          onDismiss={() => SlashHidden(true)}
+                          onSelect={async (x) => {
+                            M("");
+                            SlashHidden(true);
+                            if (x.kind === "command") {
+                              if (x.id === "help") {
+                                G(true);
+                                SetupView(true);
+                              } else if (x.id === "new") New(true);
+                              else if (x.id === "stop") {
+                                try {
+                                  await api("sessions/" + active + "/stop", {});
+                                } catch (e) {
+                                  E(e.message);
+                                }
+                              } else if (["model", "tools"].includes(x.id)) {
+                                document
+                                  .querySelector(".session-features")
+                                  ?.setAttribute("open", "");
+                                document
+                                  .querySelector(".modelbar")
+                                  ?.scrollIntoView({ block: "nearest" });
+                              } else T(x.id === "jobs" ? "tasks" : x.id);
+                            } else if (
+                              ["skills", "plugins", "mcp"].includes(x.kind)
+                            ) {
+                              const next = {
+                                ...features,
+                                [x.kind]: [
+                                  ...new Set([
+                                    ...(features[x.kind] || []),
+                                    x.member,
+                                  ]),
+                                ],
+                              };
+                              Features(next);
+                              document
+                                .querySelector(".session-features")
+                                ?.setAttribute("open", "");
+                            } else if (x.kind === "native") {
+                              const k = {
+                                web_search: "webSearch",
+                                web_fetch: "webFetch",
+                                code_execution: "codeExecution",
+                              }[x.id];
+                              Features({ ...features, [k]: true });
+                              document
+                                .querySelector(".session-features")
+                                ?.setAttribute("open", "");
+                            } else M("Please use " + x.id + " to ");
+                          }}
+                        />
+                      )}
+                      {attached.length > 0 && (
+                        <div className="attached-list">
+                          {attached.map((x) => (
+                            <span key={x.id}>
+                              {x.name}
+                              <button
+                                type="button"
+                                aria-label={"移除 " + x.name}
+                                onClick={() =>
+                                  Attached((xs) =>
+                                    xs.filter((i) => i.id !== x.id),
+                                  )
+                                }
+                              >
+                                ×
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      )}
                       <input
                         hidden
                         ref={fileInput}
                         type="file"
-                        onChange={(e) => {
-                          upload(e.target.files[0]);
+                        multiple
+                        onChange={async (e) => {
+                          const files = [...e.target.files];
                           e.target.value = "";
+                          for (const file of files) await upload(file, true);
                         }}
                       />
                       <button
                         type="button"
                         className="attach"
-                        disabled={Boolean(uploading)}
-                        disabled={current.mode === "chat"}
+                        aria-label="附加"
+                        disabled={Boolean(uploading) || working}
                         onClick={() => fileInput.current.click()}
                       >
                         <Icon name="clip" />
@@ -742,6 +939,7 @@ function App() {
                         value={message}
                         onChange={(e) => {
                           M(e.target.value);
+                          SlashHidden(false);
                           requestId.current = null;
                         }}
                         onKeyDown={(e) => {
@@ -766,6 +964,7 @@ function App() {
                       ) : (
                         <button
                           className="primary"
+                          aria-label="发送"
                           disabled={
                             sending || !message.trim() || Boolean(uploading)
                           }
@@ -853,15 +1052,11 @@ function App() {
                             更新产物
                           </button>
                           {artifacts.map((f) => (
-                            <a
+                            <AttachmentCard
                               key={f.path}
-                              className="list-row"
+                              name={f.path.split("/").at(-1)}
                               href={fileUrl(active, f.path, job)}
-                              download
-                            >
-                              <span>{f.path}</span>
-                              <small>{bytes(f.bytes)} ↓</small>
-                            </a>
+                            />
                           ))}
                         </div>
                       </>
@@ -925,16 +1120,14 @@ function App() {
                         <span>
                           {bytes(f.bytes)}{" "}
                           {f.kind === "file" && (
-                            <a
+                            <AttachmentCard
+                              name={f.name}
                               href={fileUrl(
                                 active,
                                 (filePath === "." ? "" : filePath + "/") +
                                   f.name,
                               )}
-                              download
-                            >
-                              下载 ↓
-                            </a>
+                            />
                           )}
                         </span>
                       </div>
