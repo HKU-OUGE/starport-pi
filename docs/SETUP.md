@@ -8,6 +8,8 @@ Windows 使用 `scripts/install.ps1`；Linux／macOS 使用 `scripts/install.sh`
 
 選擇節點後執行「啟動／套用出口」。使用獨立的 loopback 代理與帶隨機密鑰的管理端口；不接管既有系統代理。更新 HTTPS 訂閱後再次套用。提供者的 routing、DIRECT fallback、腳本和公開監聽設定不會直接匯入。
 
+套用出口影響新連線；執行中任務的既有連線可以繼續使用原節點，避免中途截斷傳輸。下一次模型請求會重新建立對應代理連線。
+
 API Key 透過 `node bin/starport-pi.mjs auth` 的隱藏輸入保存。聊天內容只交給設定的模型；訂閱與伺服器設定選單不進入會話。
 
 ## 2. 連接既有伺服器

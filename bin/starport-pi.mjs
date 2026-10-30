@@ -33,9 +33,9 @@ async function main() {
   let session=null;let route='';let dispatcher=null;
   async function prompt(message) {
     if(!config.activeServer||!config.workspace)throw new Error('select_server_and_create_workspace_first');
-    const current=JSON.stringify([config.activeServer,config.workspace,config.model,config.effort]);
+    const current=JSON.stringify([config.activeServer,config.workspace,config.model,config.effort,config.proxy.port,config.proxy.selected]);
     if(!session||route!==current){
-      session?.dispose();dispatcher=requireModelProxy(config);
+      session?.dispose();if(dispatcher)await dispatcher.close();dispatcher=requireModelProxy(config);
       const result=await makeSession(config,root,remote);session=result.session;route=current;
       session.subscribe(event=>{
         if(event.type==='message_update'&&event.assistantMessageEvent?.type==='text_delta')process.stdout.write(event.assistantMessageEvent.delta.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]/g,''));
