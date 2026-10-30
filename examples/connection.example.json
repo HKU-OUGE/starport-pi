@@ -1,0 +1,9 @@
+{
+  "mode": "dsw",
+  "instanceId": "dsw-example",
+  "region": "actual-region-id",
+  "user": "root",
+  "proxyClient": "./private/proxyclient.exe",
+  "credentialsFile": "./private/proxyclient-config",
+  "identityFile": "./private/ssh-key"
+}

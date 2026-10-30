@@ -1,0 +1,23 @@
+{
+  "id": "taiwan-utf8-v1",
+  "timezone": "Asia/Taipei",
+  "locale": "zh_TW.UTF-8",
+  "encoding": "UTF-8",
+  "environment": {
+    "TZ": "Asia/Taipei",
+    "LANG": "zh_TW.UTF-8",
+    "LC_ALL": "zh_TW.UTF-8",
+    "LANGUAGE": "zh_TW:zh:en",
+    "PYTHONUTF8": "1",
+    "PYTHONIOENCODING": "utf-8",
+    "PYTHONUNBUFFERED": "1",
+    "FONTCONFIG_FILE": "/etc/fonts/starport.conf",
+    "XDG_CACHE_HOME": "/tmp/cache",
+    "MPLCONFIGDIR": "/tmp/matplotlib"
+  },
+  "fonts": {
+    "sans": "Noto Sans CJK TC",
+    "serif": "Noto Serif CJK TC",
+    "mono": "Noto Sans Mono CJK TC"
+  }
+}
