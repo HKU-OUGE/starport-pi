@@ -13,8 +13,9 @@ $Node = (Get-Command node -ErrorAction Stop).Source
 if ($LASTEXITCODE -ne 0) { throw 'Profile initialization failed.' }
 $Launcher = Join-Path $ProfileRoot 'start-panel.ps1'
 function Quote-Literal([string]$Value) { "'" + $Value.Replace("'", "''") + "'" }
-$Entry = Join-Path $RepoRoot 'bin\starport-pi.mjs'
-$Body = '$env:STARPORT_PI_STATE = ' + (Quote-Literal $ProfileRoot) + "`r`n" + '& ' + (Quote-Literal $Node) + ' ' + (Quote-Literal $Entry) + " panel $Port`r`n"
+$Entry = Join-Path $RepoRoot 'starport-pi.cmd'
+if (-not (Test-Path $Entry)) { throw 'Run scripts/install.ps1 first to create the native launcher.' }
+$Body = '$env:STARPORT_PI_STATE = ' + (Quote-Literal $ProfileRoot) + "`r`n" + '& ' + (Quote-Literal $Entry) + " panel $Port`r`n"
 [IO.File]::WriteAllText($Launcher, $Body, [Text.UTF8Encoding]::new($false))
 $Action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument ('-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "' + $Launcher + '"')
 $CurrentUser = [Security.Principal.WindowsIdentity]::GetCurrent().Name
