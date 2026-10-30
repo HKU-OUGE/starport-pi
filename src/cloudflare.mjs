@@ -1,12 +1,28 @@
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
+import http from "node:http";
 import { writePrivate, privateDir } from "./config.mjs";
 import { accessProof } from "./access.mjs";
 import { Agent, fetch as operatorFetch } from "undici";
 const managementDispatcher = new Agent();
 const managementFetch = (url, options) =>
   operatorFetch(url, { ...options, dispatcher: managementDispatcher });
+
+function probeOrigin(port, hostname) {
+  // fetch may discard a custom Host. Use a fixed loopback TCP destination and
+  // the actual public Host so this checks the Access path, not local login.
+  return new Promise((resolve, reject) => {
+    const request = http.get({
+      hostname: "127.0.0.1", port, path: "/api/bootstrap",
+      headers: { Host: hostname }, signal: AbortSignal.timeout(3000),
+    }, response => {
+      response.resume();
+      resolve({ status: response.statusCode, proof: response.headers["x-starport-access-proof"] });
+    });
+    request.once("error", reject);
+  });
+}
 
 export class Cloudflare {
   constructor(token, { fetcher = managementFetch } = {}) {
@@ -249,16 +265,13 @@ export class Enrollment {
     this.save(r);
     let probe;
     try {
-      probe = await managementFetch(
-        "http://127.0.0.1:" + r.port + "/api/bootstrap",
-        { signal: AbortSignal.timeout(3000), redirect: "error" },
-      );
+      probe = await probeOrigin(r.port, r.hostname);
     } catch {
       throw new Error("start_panel_on_configured_port_then_resume");
     }
     if (
       probe.status !== 401 ||
-      probe.headers.get("x-starport-access-proof") !== accessProof(access)
+      probe.proof !== accessProof(access)
     )
       throw new Error("origin_access_verification_failed");
     const tunnel = await this.create(r, "tunnel", b + "/cfd_tunnel", {
@@ -271,7 +284,11 @@ export class Enrollment {
       {
         config: {
           ingress: [
-            { hostname: r.hostname, service: "http://127.0.0.1:" + r.port },
+            {
+              hostname: r.hostname,
+              service: "http://127.0.0.1:" + r.port,
+              originRequest: { httpHostHeader: r.hostname },
+            },
             { service: "http_status:404" },
           ],
         },

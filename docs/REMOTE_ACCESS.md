@@ -95,6 +95,10 @@ Zero Trust 帐户需已设置登入方式，例如电子邮件一次性 PIN。�
 
 Access 登入权不等于 Cloudflare 管理权。来源站验证 JWT 签名、issuer、audience、期限及完整信箱；只伪造 email header 不会通过。远端「部署与管理」另需本机访问码。此面板内允许的使用者共享此面板资料；不同人的资料隔离应使用不同 OS 帐户／设置档及独立远端 worker 帐户或实例，不能只换网址。
 
+启用 Access 后，本机 `http://127.0.0.1:18900/` 仍使用本机访问码，公网 HTTPS 网址使用 Access 登录，两种入口各自验证来源。端口以实际启动配置为准。本机 cookie 不被公网入口接受；Tunnel 固定使用分配的公网 Host，带转发标记的请求不能走本机登录。
+
+旧版在应用 Access 后若显示 `origin_not_allowed`，更新工作台并重新启动面板，从原本机网址登录后再次点击「应用 Access 并启动 Tunnel」。保留私有配置及 `cloudflare/receipt.json`，系统会核对并接续已创建的资源，无需重新分配网址或删除 Access 设置。
+
 ### Agent／CLI 配置
 
 将 `examples/cloudflare.example.json` 复制到私有设置目录，填入网域与信箱，Token 放在同目录 `api-token`。POSIX 文件权限使用 `chmod 600 api-token`。在同一 `STARPORT_PI_STATE` 下启动面板后执行：

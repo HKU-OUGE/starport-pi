@@ -48,6 +48,27 @@ export function csrfFor(key, identity) {
     .update("csrf:" + identity)
     .digest("hex");
 }
+export function requestPolicy(req, config, port) {
+  const host = req.headers.host;
+  if (["127.0.0.1:" + port, "localhost:" + port].includes(host)) {
+    const loopback = ["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(
+      req.socket?.remoteAddress,
+    );
+    const forwarded = Object.keys(req.headers).some(
+      (name) =>
+        name === "forwarded" || name === "via" ||
+        name === "true-client-ip" || name.startsWith("x-forwarded-") ||
+        name.startsWith("cf-"),
+    );
+    // cloudflared also connects over loopback. Peer IP alone is not proof of
+    // local access: require a loopback Host and reject all forwarding markers.
+    if (!loopback || forwarded) throw new Error("local_access_denied");
+    return { mode: "local", origin: "http://" + host };
+  }
+  if (config.mode === "cloudflare" && host === config.hostname)
+    return { mode: "cloudflare", origin: "https://" + config.hostname };
+  throw new Error("host_not_allowed");
+}
 const keys = new Map();
 const operatorDispatcher = new Agent();
 export async function verifyAccess(token, c, { keySet } = {}) {

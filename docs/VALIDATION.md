@@ -107,3 +107,26 @@ audit. Browser checks used fixture operation records to verify retry counts,
 saved bytes, a specific disk-space error, and automatic transition to resumed
 progress. Desktop and 390×844 mobile layouts had no framework error overlay,
 console errors or horizontal overflow. The fixture did not initialize a server.
+
+## v0.3.3 local and Cloudflare request origins
+
+An HTTP regression test reproduced `origin_not_allowed` when a local session
+continued after Access enrollment. The fix verifies the request's exact entry
+point: loopback Host plus loopback peer without forwarding headers for local
+login, and the configured public Host plus Access JWT for remote access. CSRF
+and exact-Origin checks remain required for writes; remote setup also requires
+the operator key. Local cookies and forged forwarding headers cannot substitute
+for a valid Access JWT on the public entry.
+
+Tests cover the existing local session, login after restart, expired/wrong
+audience/wrong email/invalid signature JWT rejection, and continuation after an
+unknown Tunnel creation outcome without duplicate resources. The deployment
+probe uses the public Host over a fixed loopback connection, and Tunnel ingress
+pins that Host. A browser fixture verified the actual Apply button, transition
+to configured state, and subsequent local state refresh without a login or
+origin error. Cloudflare API calls and the connector were simulated; no real
+account resources or existing console were changed for this check.
+
+Local checks: 40 Node tests, 13 Python tests, web build and publication audit
+passed. Desktop browser page identity, rendered content, interaction and console
+checks passed with no framework error overlay.

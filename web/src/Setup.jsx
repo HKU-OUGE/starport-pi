@@ -924,6 +924,10 @@ export default function Setup({ onClose, onChange, guideOnly = false }) {
           </p>
           <h3>每个人各自一套</h3>
           <p>
+            启用 Access 后，本机网址仍用本机访问码登录；公网网址使用 Access 登录。
+            中断时保留原配置，更新并重启面板后再次应用即可接续。
+          </p>
+          <p>
             不同使用者使用不同
             STARPORT_PI_STATE、面板连接埠与远端工作帐户／实例；登录邮箱只加入各自的
             Access 名单。管理入口另需本机访问码。

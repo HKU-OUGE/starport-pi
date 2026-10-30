@@ -1,6 +1,6 @@
 {
   "name": "starport-pi",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "private": true,
   "description": "Pi workbench with isolated local and remote projects, managed egress and portable configuration",
   "type": "module",

@@ -36,7 +36,11 @@ SSH 连线帐号是可信管理帐号。多名不互信的使用者应使用不�
 ## Web deployment control plane
 
 The panel binds only to loopback. Local login uses a private random key. Cloudflare
-mode requires a verified Access JWT; the old local cookie cannot bypass it. Remote
+requests to the public hostname require a verified Access JWT; a local cookie
+cannot bypass it. The local operator entry remains available after enrollment,
+requiring the exact loopback Host, a loopback peer, no forwarding headers, and
+the local login secret. Each entry checks its own exact Origin and CSRF identity.
+Tunnel ingress pins the public Host; proxy headers cannot select the local path. Remote
 setup endpoints additionally require the operator key. Model tools do not include
 setup, local key search, cloud enrollment or subscription operations.
 

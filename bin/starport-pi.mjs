@@ -10,7 +10,7 @@ import {spawn} from 'node:child_process';
 
 async function main() {
   const action=process.argv[2];
-  if(action==='--version'){console.log('Starport Pi 0.3.2');return;}
+  if(action==='--version'){console.log('Starport Pi 0.3.3');return;}
   if(action==='--help'){console.log('starport-pi [configure | auth | panel [PORT] | verify-server | doctor | probe | --print MESSAGE]\nInteractive: /starport /network /servers /workspace /tunnel /upload /download /help');return;}
   const root=stateRoot();let config=load(root);
   if(action==='panel'){

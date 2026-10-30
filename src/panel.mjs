@@ -16,6 +16,7 @@ import {
   localCookie,
   csrfFor,
   same,
+  requestPolicy,
 } from "./access.mjs";
 import { PanelStore, safeError } from "./panel-store.mjs";
 import { Setup } from "./setup.mjs";
@@ -128,14 +129,7 @@ export async function startPanel(
       if (c.mode === "cloudflare")
         res.setHeader("X-Starport-Access-Proof", accessProof(c));
       const local = "127.0.0.1:" + server.address().port;
-      if (
-        ![
-          local,
-          "localhost:" + server.address().port,
-          ...(c.mode === "cloudflare" ? [c.hostname] : []),
-        ].includes(req.headers.host)
-      )
-        throw new Error("host_not_allowed");
+      const policy = requestPolicy(req, c, server.address().port);
       const url = new URL(req.url, "http://" + local),
         p = url.pathname;
       if (!p.startsWith("/api/")) {
@@ -165,18 +159,14 @@ export async function startPanel(
         return;
       }
       if (req.method === "POST") {
-        const expected =
-          c.mode === "cloudflare"
-            ? "https://" + c.hostname
-            : "http://" + req.headers.host;
         if (
-          req.headers.origin !== expected ||
+          req.headers.origin !== policy.origin ||
           !String(req.headers["content-type"]).startsWith("application/json")
         )
           throw new Error("origin_not_allowed");
       }
       if (p === "/api/login" && req.method === "POST") {
-        if (c.mode !== "local") throw new Error("cloudflare_login_required");
+        if (policy.mode !== "local") throw new Error("cloudflare_login_required");
         if (Date.now() - loginWindow > 60000) {
           loginWindow = Date.now();
           loginFailures = 0;
@@ -196,7 +186,12 @@ export async function startPanel(
         json(req, res, 200, { ok: true });
         return;
       }
-      const identity = await authenticate(req, c, key, authOptions);
+      const identity = await authenticate(
+        req,
+        policy.mode === "local" ? { mode: "local" } : c,
+        key,
+        authOptions,
+      );
       if (
         req.method === "POST" &&
         !same(req.headers["x-starport-csrf"], csrfFor(key, identity))
@@ -204,7 +199,7 @@ export async function startPanel(
         throw new Error("csrf_required");
       const send = (value) => json(req, res, 200, value);
       if (p === "/api/setup" && req.method === "POST") {
-        if (c.mode !== "local" && !same(req.headers["x-starport-admin"], key))
+        if (policy.mode !== "local" && !same(req.headers["x-starport-admin"], key))
           throw new Error("operator_key_required");
         const { action, ...input } = await body(req, 24 * 1024 * 1024);
         send(await setup.dispatch(action, input));
@@ -214,7 +209,7 @@ export async function startPanel(
         const config = load(root);
         send({
           csrf: csrfFor(key, identity),
-          mode: c.mode,
+          mode: policy.mode,
           models: await modelChoices(root),
           serverKinds: Object.fromEntries(
             Object.entries(config.servers).map(([n, s]) => [n, s.mode]),
@@ -238,7 +233,7 @@ export async function startPanel(
           "Set-Cookie",
           "starport_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0",
         );
-        send({ url: c.mode === "cloudflare" ? "/cdn-cgi/access/logout" : "/" });
+        send({ url: policy.mode === "cloudflare" ? "/cdn-cgi/access/logout" : "/" });
         return;
       }
       const match = p.match(
